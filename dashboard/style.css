@@ -1,0 +1,135 @@
+:root {
+    --bg-primary: #07070F;
+    --bg-glass: rgba(255, 255, 255, 0.04);
+    --bg-glass-hover: rgba(255, 255, 255, 0.07);
+    --border-glass: rgba(255, 255, 255, 0.08);
+    --blur-amount: 12px;
+
+    --accent-gold: #F0C040;
+    --accent-cyan: #00D4FF;
+    --accent-emerald: #00F5A0;
+    --accent-crimson: #FF3B3B;
+    --accent-amber: #FFB347;
+    --accent-violet: #A855F7;
+
+    --text-primary: #FFFFFF;
+    --text-secondary: rgba(255, 255, 255, 0.6);
+    --text-muted: rgba(255, 255, 255, 0.35);
+
+    --font-heading: "Bebas Neue", sans-serif;
+    --font-mono: "IBM Plex Mono", monospace;
+    --font-body: "Inter", sans-serif;
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&family=Bebas+Neue&display=swap');
+
+.stApp {
+    background: var(--bg-primary);
+    font-family: var(--font-body);
+}
+
+[data-testid="stSidebar"] {
+    background: #0a0a14;
+    border-right: 1px solid var(--border-glass);
+}
+
+[data-testid="stHeader"] {
+    background: transparent;
+}
+
+.glass-card {
+    background: var(--bg-glass);
+    backdrop-filter: blur(var(--blur-amount));
+    -webkit-backdrop-filter: blur(var(--blur-amount));
+    border: 1px solid var(--border-glass);
+    border-radius: 12px;
+    padding: 20px;
+    transition: background 0.2s ease;
+}
+
+.glass-card:hover {
+    background: var(--bg-glass-hover);
+}
+
+.positive { color: var(--accent-emerald); }
+.negative { color: var(--accent-crimson); }
+.neutral  { color: var(--text-secondary); }
+
+.kairos-heading {
+    font-family: var(--font-heading);
+    letter-spacing: 1px;
+    color: var(--text-primary);
+}
+
+.kairos-mono {
+    font-family: var(--font-mono);
+}
+
+.kpi-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.kpi-value {
+    font-family: var(--font-mono);
+    font-size: 28px;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.kpi-sub {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.badge {
+    display: inline-block;
+    font-size: 10px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+}
+
+.badge-long {
+    background: rgba(0, 212, 255, 0.12);
+    color: var(--accent-cyan);
+}
+
+.badge-short {
+    background: rgba(168, 85, 247, 0.12);
+    color: var(--accent-violet);
+}
+
+.badge-paper {
+    background: rgba(255, 179, 71, 0.1);
+    color: var(--accent-amber);
+}
+
+.badge-live {
+    background: rgba(255, 59, 59, 0.12);
+    color: var(--accent-crimson);
+}
+
+.status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 5px;
+}
+
+.status-running { background: var(--accent-emerald); }
+.status-halted { background: var(--accent-crimson); }
+.status-waiting { background: var(--text-muted); }
+
+hr {
+    border-color: var(--border-glass);
+}
+
+.stDataFrame, .stTable {
+    background: var(--bg-glass);
+}
