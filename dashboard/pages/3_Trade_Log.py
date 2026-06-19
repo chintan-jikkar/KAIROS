@@ -1,6 +1,9 @@
 """Page 3 — Trade Log: full history, filters, export."""
 from pathlib import Path
 
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+
 import streamlit as st
 
 from dashboard.db import get_session

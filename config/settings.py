@@ -2,14 +2,16 @@ from pathlib import Path
 from dotenv import load_dotenv
 import os
 
-load_dotenv(Path(__file__).parent.parent / ".env")
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+load_dotenv(PROJECT_ROOT / ".env")
 
 # System
 EXECUTION_MODE = os.getenv("EXECUTION_MODE", "PAPER")
 ACTIVE_MARKET = os.getenv("ACTIVE_MARKET", "INDIA")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
-DB_PATH = os.getenv("DB_PATH", "database/kairos.db")
-LOG_PATH = os.getenv("LOG_PATH", "logs/kairos.log")
+DB_PATH = os.getenv("DB_PATH", str(PROJECT_ROOT / "database" / "kairos.db"))
+LOG_PATH = os.getenv("LOG_PATH", str(PROJECT_ROOT / "logs" / "kairos.log"))
 
 # Capital
 STARTING_CAPITAL_INR = float(os.getenv("STARTING_CAPITAL_INR", 10000))

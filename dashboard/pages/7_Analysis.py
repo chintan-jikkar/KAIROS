@@ -1,6 +1,9 @@
 """Page 7 — Analysis: drawdown, strategy attribution, time-of-day, symbol performance, MAE/MFE, costs."""
 from pathlib import Path
 
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st

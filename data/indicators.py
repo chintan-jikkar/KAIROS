@@ -108,12 +108,12 @@ def add_atr_pct(df: pd.DataFrame, period: int = 14) -> pd.DataFrame:
 
 def add_bbands(df: pd.DataFrame,
                period: int = 20, std: float = 2.0) -> pd.DataFrame:
-    bb = ta.bbands(df["close"], length=period, std=std)
+    bb = ta.bbands(df["close"], length=period, lower_std=std, upper_std=std)
     if bb is not None:
-        df["bb_upper"] = bb[f"BBU_{period}_{std}"]
-        df["bb_mid"] = bb[f"BBM_{period}_{std}"]
-        df["bb_lower"] = bb[f"BBL_{period}_{std}"]
-        df["bb_width"] = bb[f"BBB_{period}_{std}"]
+        df["bb_upper"] = bb[f"BBU_{period}_{std}_{std}"]
+        df["bb_mid"] = bb[f"BBM_{period}_{std}_{std}"]
+        df["bb_lower"] = bb[f"BBL_{period}_{std}_{std}"]
+        df["bb_width"] = bb[f"BBB_{period}_{std}_{std}"]
     return df
 
 
