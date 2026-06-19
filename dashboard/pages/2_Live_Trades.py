@@ -7,13 +7,17 @@ import streamlit as st
 from sqlalchemy import func
 
 from dashboard.db import get_session
+from dashboard.components.sidebar import render_sidebar
+from dashboard.components.header import render_header
 from database.models import Trade, Signal
 from database.trade_log import get_open_trades
 
 st.set_page_config(page_title="KAIROS · Live Trades", page_icon="⚡", layout="wide")
 st.markdown(f"<style>{(Path(__file__).parent.parent / 'style.css').read_text()}</style>", unsafe_allow_html=True)
 
+render_sidebar("Live trades")
 db = get_session()
+render_header()
 st.markdown('<h2 class="kairos-heading">Live trades</h2>', unsafe_allow_html=True)
 
 STRATEGY_NAMES = {

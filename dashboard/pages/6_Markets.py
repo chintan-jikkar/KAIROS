@@ -3,23 +3,16 @@ from pathlib import Path
 
 import streamlit as st
 
+from dashboard.components.sidebar import render_sidebar
+from dashboard.components.header import render_header
+from dashboard.components.market_quotes import fetch_quote
+
 st.set_page_config(page_title="KAIROS · Markets", page_icon="⚡", layout="wide")
 st.markdown(f"<style>{(Path(__file__).parent.parent / 'style.css').read_text()}</style>", unsafe_allow_html=True)
 
+render_sidebar("Markets")
+render_header()
 st.markdown('<h2 class="kairos-heading">Markets</h2>', unsafe_allow_html=True)
-
-
-@st.cache_data(ttl=60)
-def fetch_quote(ticker: str) -> dict | None:
-    import yfinance as yf
-    try:
-        df = yf.download(ticker, period="2d", interval="1d", auto_adjust=True, progress=False)
-        if len(df) < 2:
-            return None
-        last, prev = float(df["Close"].iloc[-1]), float(df["Close"].iloc[-2])
-        return {"price": last, "change": last - prev, "change_pct": (last - prev) / prev * 100}
-    except Exception:
-        return None
 
 
 def render_quote_card(label: str, ticker: str, prefix: str = ""):

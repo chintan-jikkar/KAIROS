@@ -1,3 +1,6 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&family=Bebas+Neue&display=swap');
+@import url('https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/3.35.0/tabler-icons-outline.min.css');
+
 :root {
     --bg-primary: #07070F;
     --bg-glass: rgba(255, 255, 255, 0.04);
@@ -21,7 +24,7 @@
     --font-body: "Inter", sans-serif;
 }
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&family=Bebas+Neue&display=swap');
+[data-testid="stSidebarNav"] { display: none; }
 
 .stApp {
     background: var(--bg-primary);
@@ -38,18 +41,64 @@
 }
 
 .glass-card {
-    background: var(--bg-glass);
+    background: linear-gradient(180deg, rgba(255,255,255,0.09), rgba(255,255,255,0.025));
     backdrop-filter: blur(var(--blur-amount));
     -webkit-backdrop-filter: blur(var(--blur-amount));
     border: 1px solid var(--border-glass);
+    border-top-color: rgba(255,255,255,0.22);
     border-radius: 12px;
     padding: 20px;
-    transition: background 0.2s ease;
+    position: relative;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
 }
 
 .glass-card:hover {
-    background: var(--bg-glass-hover);
+    border-color: rgba(255,255,255,0.24);
+    box-shadow: 0 14px 28px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.12);
+    transform: translateY(-2px);
 }
+
+.glass-card::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: radial-gradient(circle 160px at 50% 30%, rgba(255,255,255,0.14), transparent 72%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+}
+
+.glass-card:hover::after {
+    opacity: 1;
+}
+
+/* Charts/graphs opt out of the hover glow so it never competes with the chart's own tooltip */
+.glass-card.no-glow:hover {
+    transform: none;
+    box-shadow: none;
+    border-color: var(--border-glass);
+}
+
+.glass-card.no-glow::after {
+    display: none;
+}
+
+[data-testid="stSidebar"] a.kairos-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 9px 0;
+    color: rgba(255,255,255,0.45) !important;
+    text-decoration: none !important;
+    transition: color 0.2s ease;
+}
+
+[data-testid="stSidebar"] a.kairos-nav-item:hover { color: rgba(255,255,255,0.85) !important; }
+[data-testid="stSidebar"] a.kairos-nav-item.active { color: var(--accent-gold) !important; }
+[data-testid="stSidebar"] a.kairos-nav-item i { font-size: 19px; line-height: 1; }
+[data-testid="stSidebar"] a.kairos-nav-item span { font-size: 9.5px; }
 
 .positive { color: var(--accent-emerald); }
 .negative { color: var(--accent-crimson); }

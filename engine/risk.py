@@ -165,7 +165,7 @@ def _get_vix(market: str) -> float | None:
         df = yf.download(ticker, period="2d", interval="1d",
                          auto_adjust=True, progress=False)
         if not df.empty:
-            return float(df["Close"].iloc[-1])
+            return float(df["Close"].squeeze().iloc[-1])
     except Exception as exc:
         logger.warning(f"Could not fetch VIX for {market}: {exc}")
     return None

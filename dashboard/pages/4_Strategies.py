@@ -5,13 +5,17 @@ from pathlib import Path
 import streamlit as st
 
 from dashboard.db import get_session
+from dashboard.components.sidebar import render_sidebar
+from dashboard.components.header import render_header
 from dashboard.components.strategy_card import render_strategy_card
 from database.models import Trade
 
 st.set_page_config(page_title="KAIROS · Strategies", page_icon="⚡", layout="wide")
 st.markdown(f"<style>{(Path(__file__).parent.parent / 'style.css').read_text()}</style>", unsafe_allow_html=True)
 
+render_sidebar("Strategies")
 db = get_session()
+render_header()
 st.markdown('<h2 class="kairos-heading">Strategies</h2>', unsafe_allow_html=True)
 
 STRATEGY_LIBRARY = {

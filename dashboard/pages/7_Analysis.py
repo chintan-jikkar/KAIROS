@@ -6,13 +6,17 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from dashboard.db import get_session
+from dashboard.components.sidebar import render_sidebar
+from dashboard.components.header import render_header
 from dashboard.components.equity_curve import KAIROS_CHART_LAYOUT
 from database.models import Trade, PortfolioSnapshot
 
 st.set_page_config(page_title="KAIROS · Analysis", page_icon="⚡", layout="wide")
 st.markdown(f"<style>{(Path(__file__).parent.parent / 'style.css').read_text()}</style>", unsafe_allow_html=True)
 
+render_sidebar("Analysis")
 db = get_session()
+render_header()
 st.markdown('<h2 class="kairos-heading">Analysis</h2>', unsafe_allow_html=True)
 
 closed_trades = db.query(Trade).filter(Trade.net_pnl.isnot(None)).all()
@@ -33,7 +37,7 @@ else:
     col1, col2 = st.columns(2)
 
     with col1:
-        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+        st.markdown('<div class="glass-card no-glow">', unsafe_allow_html=True)
         st.markdown('<p style="color:var(--text-secondary);font-size:13px;margin-bottom:8px;">Drawdown from peak</p>', unsafe_allow_html=True)
         snapshots = db.query(PortfolioSnapshot).order_by(PortfolioSnapshot.date).all()
         if snapshots:
@@ -49,7 +53,7 @@ else:
         st.markdown('</div>', unsafe_allow_html=True)
 
     with col2:
-        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+        st.markdown('<div class="glass-card no-glow">', unsafe_allow_html=True)
         st.markdown('<p style="color:var(--text-secondary);font-size:13px;margin-bottom:8px;">Strategy attribution</p>', unsafe_allow_html=True)
         attr = df.groupby("strategy_id")["net_pnl"].sum().reset_index()
         fig = go.Figure(go.Pie(
@@ -65,7 +69,7 @@ else:
     col3, col4 = st.columns(2)
 
     with col3:
-        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+        st.markdown('<div class="glass-card no-glow">', unsafe_allow_html=True)
         st.markdown('<p style="color:var(--text-secondary);font-size:13px;margin-bottom:8px;">Net P&L by symbol</p>', unsafe_allow_html=True)
         by_symbol = df.groupby("symbol")["net_pnl"].sum().sort_values()
         colors = ["#00F5A0" if v >= 0 else "#FF3B3B" for v in by_symbol]
@@ -75,7 +79,7 @@ else:
         st.markdown('</div>', unsafe_allow_html=True)
 
     with col4:
-        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+        st.markdown('<div class="glass-card no-glow">', unsafe_allow_html=True)
         st.markdown('<p style="color:var(--text-secondary);font-size:13px;margin-bottom:8px;">MAE vs MFE</p>', unsafe_allow_html=True)
         colors = ["#00F5A0" if o == "WIN" else "#FF3B3B" for o in df["outcome"]]
         fig = go.Figure(go.Scatter(
@@ -89,7 +93,7 @@ else:
         st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
-    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+    st.markdown('<div class="glass-card no-glow">', unsafe_allow_html=True)
     st.markdown('<p style="color:var(--text-secondary);font-size:13px;margin-bottom:8px;">Gross P&L vs costs vs net P&L</p>', unsafe_allow_html=True)
     df["month"] = pd.to_datetime(df["timestamp_exit"]).dt.to_period("M").astype(str)
     monthly = df.groupby("month").agg(gross=("gross_pnl", "sum"), costs=("total_costs", "sum"), net=("net_pnl", "sum")).reset_index()

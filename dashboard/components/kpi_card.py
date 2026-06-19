@@ -1,5 +1,7 @@
-"""Reusable KPI card: label, R:R, %, ₹, optional win-rate ring."""
+"""Reusable KPI card: label, R:R, %, money, optional win-rate ring."""
 import streamlit as st
+
+from dashboard.components.header import fmt_currency_signed
 
 
 def render_kpi_card(
@@ -12,6 +14,7 @@ def render_kpi_card(
 ):
     sign_class = "positive" if pct >= 0 else "negative"
     accent_color = {"emerald": "#00F5A0", "gold": "#F0C040"}.get(accent, "#00F5A0")
+    money_text = fmt_currency_signed(rupee, decimals=0)
 
     ring_html = ""
     if win_rate is not None:
@@ -32,7 +35,7 @@ def render_kpi_card(
             <div>
                 <div class="kpi-label">{label}</div>
                 <div class="kpi-value {sign_class}">{pct:+.1f}%</div>
-                <div class="kpi-sub">R:R {rr:+.2f} &middot; ₹{rupee:+,.0f}</div>
+                <div class="kpi-sub">R:R {rr:+.2f} &middot; {money_text}</div>
             </div>
             {ring_html}
         </div>

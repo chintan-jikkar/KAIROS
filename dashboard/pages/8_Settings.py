@@ -5,11 +5,15 @@ from pathlib import Path
 import streamlit as st
 
 from config.settings import EXECUTION_MODE, ACTIVE_MARKET
+from dashboard.components.sidebar import render_sidebar
+from dashboard.components.header import render_header
 from engine.risk import RISK_PARAMS
 
 st.set_page_config(page_title="KAIROS · Settings", page_icon="⚡", layout="wide")
 st.markdown(f"<style>{(Path(__file__).parent.parent / 'style.css').read_text()}</style>", unsafe_allow_html=True)
 
+render_sidebar("Settings")
+render_header()
 st.markdown('<h2 class="kairos-heading">Settings</h2>', unsafe_allow_html=True)
 
 st.markdown('<div class="glass-card">', unsafe_allow_html=True)

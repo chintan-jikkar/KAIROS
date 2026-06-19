@@ -5,9 +5,14 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from dashboard.components.sidebar import render_sidebar
+from dashboard.components.header import render_header
+
 st.set_page_config(page_title="KAIROS · Screener", page_icon="⚡", layout="wide")
 st.markdown(f"<style>{(Path(__file__).parent.parent / 'style.css').read_text()}</style>", unsafe_allow_html=True)
 
+render_sidebar("Screener")
+render_header()
 st.markdown('<h2 class="kairos-heading">Screener</h2>', unsafe_allow_html=True)
 
 cache_path = Path(__file__).parent.parent.parent / "config" / "universe_cache.json"

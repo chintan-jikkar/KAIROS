@@ -4,13 +4,17 @@ from pathlib import Path
 import streamlit as st
 
 from dashboard.db import get_session
+from dashboard.components.sidebar import render_sidebar
+from dashboard.components.header import render_header
 from dashboard.components.trade_table import trades_to_dataframe, render_trade_table, render_summary_bar
 from database.models import Trade
 
 st.set_page_config(page_title="KAIROS · Trade Log", page_icon="⚡", layout="wide")
 st.markdown(f"<style>{(Path(__file__).parent.parent / 'style.css').read_text()}</style>", unsafe_allow_html=True)
 
+render_sidebar("Logbook")
 db = get_session()
+render_header()
 st.markdown('<h2 class="kairos-heading">Trade log</h2>', unsafe_allow_html=True)
 
 all_trades = db.query(Trade).filter(Trade.timestamp_exit.isnot(None)).order_by(Trade.timestamp_exit.desc()).all()
