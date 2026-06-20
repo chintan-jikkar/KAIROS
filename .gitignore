@@ -40,6 +40,9 @@ logs/*.log
 *.swo
 .DS_Store
 
+# Claude Code local config (never tracked)
+.claude/
+
 # Testing
 .pytest_cache/
 .coverage
