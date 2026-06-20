@@ -99,6 +99,46 @@
 [data-testid="stSidebar"] a.kairos-nav-item.active { color: var(--accent-gold) !important; }
 [data-testid="stSidebar"] a.kairos-nav-item i { font-size: 19px; line-height: 1; }
 [data-testid="stSidebar"] a.kairos-nav-item span { font-size: 9.5px; }
+[data-testid="stSidebar"] a.kairos-nav-item.collapsed { padding: 11px 0; }
+
+[data-testid="stSidebar"] button[kind] {
+    min-height: 28px !important;
+    height: 28px !important;
+    padding: 0 6px !important;
+    font-size: 13px !important;
+    background: transparent !important;
+    border: 1px solid var(--border-glass) !important;
+    color: rgba(255,255,255,0.5) !important;
+}
+[data-testid="stSidebar"] button[kind]:hover {
+    color: var(--accent-gold) !important;
+    border-color: rgba(240,192,64,0.4) !important;
+}
+
+@keyframes currencyFlash {
+    0%   { opacity: 0.25; transform: scale(0.97); filter: brightness(1.8); }
+    100% { opacity: 1; transform: scale(1); filter: brightness(1); }
+}
+.curr-val {
+    display: inline-block;
+    animation: currencyFlash 0.45s ease-out;
+}
+
+.badge-paper-prominent {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding: 7px 14px;
+    border-radius: 8px;
+    background: rgba(255, 179, 71, 0.14);
+    border: 1.5px solid rgba(255, 179, 71, 0.5);
+    color: var(--accent-amber);
+    box-shadow: 0 0 14px rgba(255, 179, 71, 0.15);
+}
+.badge-paper-prominent .status-dot { background: var(--accent-amber); }
 
 .positive { color: var(--accent-emerald); }
 .negative { color: var(--accent-crimson); }

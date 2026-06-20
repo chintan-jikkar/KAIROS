@@ -71,6 +71,61 @@ st.caption("Edits here are visual only — persisting changes to engine/risk.py 
 st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
+st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+st.markdown('<p style="color:var(--text-secondary);font-size:13px;margin-bottom:4px;">Charges &amp; breakeven</p>', unsafe_allow_html=True)
+st.caption("Exact formulas used by engine/costs.py for every Net P&L and breakeven-price figure in the dashboard.")
+
+charge_cols = st.columns(2)
+with charge_cols[0]:
+    st.markdown("**India (NSE)**")
+    india_rows = [
+        ("Equity delivery", "Free", "0.1% (sell)", "0.015% (buy)"),
+        ("Equity intraday", "min(₹20, 0.03% turnover)", "0.025% (sell)", "0.003% (buy)"),
+        ("F&O futures", "min(₹20, 0.03% turnover)", "0.01% (sell)", "0.002% (buy)"),
+        ("F&O options", "₹20 flat/order", "0.05% (sell, on premium)", "0.003% (buy)"),
+    ]
+    india_df_rows = "".join(
+        f'<tr><td style="padding:5px 8px;color:var(--text-secondary);">{seg}</td>'
+        f'<td style="padding:5px 8px;" class="kairos-mono">{b}</td>'
+        f'<td style="padding:5px 8px;" class="kairos-mono">{stt}</td>'
+        f'<td style="padding:5px 8px;" class="kairos-mono">{sd}</td></tr>'
+        for seg, b, stt, sd in india_rows
+    )
+    st.markdown(
+        f'<table style="width:100%;font-size:11.5px;border-collapse:collapse;">'
+        f'<tr style="color:var(--text-muted);"><td style="padding:5px 8px;">Segment</td>'
+        f'<td style="padding:5px 8px;">Brokerage</td><td style="padding:5px 8px;">STT</td>'
+        f'<td style="padding:5px 8px;">Stamp duty</td></tr>{india_df_rows}</table>'
+        f'<p style="font-size:11px;color:var(--text-muted);margin-top:8px;">'
+        f'Plus on every segment: exchange charges 0.00335% of turnover, SEBI charges 0.0001% of turnover, '
+        f'GST 18% on (brokerage + exchange + SEBI).</p>',
+        unsafe_allow_html=True,
+    )
+with charge_cols[1]:
+    st.markdown("**US (NASDAQ/NYSE)**")
+    st.markdown(
+        '<table style="width:100%;font-size:11.5px;border-collapse:collapse;">'
+        '<tr style="color:var(--text-muted);"><td style="padding:5px 8px;">Fee</td>'
+        '<td style="padding:5px 8px;">Rate</td></tr>'
+        '<tr><td style="padding:5px 8px;color:var(--text-secondary);">SEC fee</td>'
+        '<td style="padding:5px 8px;" class="kairos-mono">0.00278% of sell notional</td></tr>'
+        '<tr><td style="padding:5px 8px;color:var(--text-secondary);">FINRA TAF</td>'
+        '<td style="padding:5px 8px;" class="kairos-mono">$0.000119/share, max $5.95</td></tr>'
+        '</table>'
+        '<p style="font-size:11px;color:var(--text-muted);margin-top:8px;">'
+        'Commission-free brokerage assumed (Alpaca). No stamp duty or STT equivalent in the US.</p>',
+        unsafe_allow_html=True,
+    )
+
+st.markdown(
+    '<p style="font-size:11px;color:var(--text-muted);margin-top:12px;border-top:0.5px solid var(--border-glass);padding-top:10px;">'
+    'Breakeven price (entry price adjusted for costs incurred so far) is calculated per-trade and shown when you '
+    'open a trade\'s journal entry in the Logbook.</p>',
+    unsafe_allow_html=True,
+)
+st.markdown('</div>', unsafe_allow_html=True)
+
+st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
 col_sched, col_data = st.columns(2)
 
 with col_sched:

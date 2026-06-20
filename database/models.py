@@ -109,7 +109,9 @@ class Trade(Base):
 
     # Notes
     auto_notes = Column(Text, nullable=True)
-    manual_notes = Column(Text, nullable=True)
+    manual_notes = Column(Text, nullable=True)       # "Comment" in the trade journal
+    conviction = Column(Integer, nullable=True)       # 1-5, how confident at entry
+    lesson_learned = Column(Text, nullable=True)      # post-trade retrospective
 
 
 class PortfolioSnapshot(Base):
@@ -149,3 +151,16 @@ class Signal(Base):
     was_executed = Column(Boolean, default=False)
     execution_skipped_reason = Column(String, nullable=True)
     trade_id = Column(String, nullable=True)
+
+
+class WatchlistItem(Base):
+    """User-pinned symbols shown at-a-glance in the Markets page, independent of the screener universe."""
+    __tablename__ = "watchlist_items"
+
+    item_id = Column(String, primary_key=True,
+                     default=lambda: str(uuid.uuid4()))
+    symbol = Column(String, nullable=False)
+    market = Column(String, default="INDIA")    # INDIA | US
+    note = Column(String, nullable=True)         # short reason it's pinned, e.g. "earnings Thu"
+    added_at = Column(DateTime, default=datetime.utcnow)
+    sort_order = Column(Integer, default=0)

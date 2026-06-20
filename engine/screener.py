@@ -15,10 +15,12 @@ from data.universe import (
 )
 
 
-def run_india_screener(top_n: int = 6) -> list[dict]:
+def run_india_screener(top_n: int | None = 6) -> list[dict]:
     """
-    Returns a ranked list of up to top_n dicts, each with:
+    Returns a ranked list of dicts, each with:
         symbol, atr_pct, vol_ratio, rsi14, beta, assigned_strategy, score
+    top_n caps the result (used to pick the active trading universe);
+    pass None to return every qualifying stock (used for browsing in the Markets page).
     """
     symbols = get_india_all_symbols()
     results = []
@@ -40,7 +42,9 @@ def run_india_screener(top_n: int = 6) -> list[dict]:
     df["atr_norm"] = df["atr_pct"] / df["atr_pct"].max()
     df["vol_norm"] = df["vol_ratio"] / df["vol_ratio"].max()
     df["score"] = (df["atr_norm"] * 60 + df["vol_norm"] * 40).round(1)
-    df = df.sort_values("score", ascending=False).head(top_n)
+    df = df.sort_values("score", ascending=False)
+    if top_n is not None:
+        df = df.head(top_n)
 
     ranked = df.to_dict(orient="records")
     logger.info(f"Screener selected {len(ranked)} stocks: {[r['symbol'] for r in ranked]}")

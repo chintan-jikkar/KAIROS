@@ -13,6 +13,25 @@ from sqlalchemy.orm import Session
 from database.models import Trade
 
 
+def market_currency_symbol(market: str) -> str:
+    """The trade's own intrinsic currency — independent of any dashboard display toggle."""
+    return "$" if market == "US" else "₹"
+
+
+def breakeven_price(trade: Trade) -> float | None:
+    """Price at which exiting would net exactly zero, given costs incurred so far."""
+    if not trade.entry_price or not trade.quantity:
+        return None
+    costs_so_far = (trade.total_costs or 0) or (
+        (trade.brokerage or 0) + (trade.stt or 0) + (trade.stamp_duty or 0)
+        + (trade.exchange_charges or 0) + (trade.sebi_charges or 0) + (trade.gst or 0)
+        + (trade.sec_fee or 0) + (trade.finra_taf or 0)
+    )
+    if trade.direction == "SHORT":
+        return round(trade.entry_price - (costs_so_far / trade.quantity), 4)
+    return round(trade.entry_price + (costs_so_far / trade.quantity), 4)
+
+
 def create_trade(
     db: Session,
     signal: dict,
@@ -133,9 +152,10 @@ def close_trade(
     trade.actual_rr_achieved = round(
         net_pnl / abs((trade.stop_loss_price - entry_price) * quantity), 4
     ) if trade.stop_loss_price and trade.stop_loss_price != entry_price else None
+    sym = market_currency_symbol(trade.market)
     trade.auto_notes = (
-        f"Exit: {exit_reason} | Net P&L: ₹{net_pnl:.2f} ({net_pnl_pct:.2%}) | "
-        f"Costs: ₹{total_costs:.2f} | Hold: {holding_hours:.1f}h"
+        f"Exit: {exit_reason} | Net P&L: {sym}{net_pnl:.2f} ({net_pnl_pct:.2%}) | "
+        f"Costs: {sym}{total_costs:.2f} | Hold: {holding_hours:.1f}h"
     )
 
     db.commit()
@@ -144,6 +164,28 @@ def close_trade(
         f"Trade closed: {trade.trade_id} | {trade.symbol} | {exit_reason} | "
         f"net P&L: ₹{net_pnl:.2f} ({net_pnl_pct:.2%})"
     )
+    return trade
+
+
+def update_journal(
+    db: Session,
+    trade_id: str,
+    conviction: int | None = None,
+    manual_notes: str | None = None,
+    lesson_learned: str | None = None,
+) -> Trade | None:
+    """Lets the user fill in the journal fields after the fact, from the Logbook page."""
+    trade = db.query(Trade).filter(Trade.trade_id == trade_id).first()
+    if not trade:
+        return None
+    if conviction is not None:
+        trade.conviction = conviction
+    if manual_notes is not None:
+        trade.manual_notes = manual_notes
+    if lesson_learned is not None:
+        trade.lesson_learned = lesson_learned
+    db.commit()
+    db.refresh(trade)
     return trade
 
 

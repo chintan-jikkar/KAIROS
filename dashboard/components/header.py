@@ -43,10 +43,17 @@ def render_header():
             )
             st.session_state.currency = selected or st.session_state.currency
         with c3:
-            mode_class = "badge-paper" if EXECUTION_MODE == "PAPER" else "badge-live"
+            if EXECUTION_MODE == "PAPER":
+                mode_html = (
+                    '<span class="badge-paper-prominent">'
+                    '<i class="ti ti-flask" style="font-size:14px;"></i>PAPER TRADING'
+                    '</span>'
+                )
+            else:
+                mode_html = '<span class="badge badge-live">Live</span>'
             st.markdown(
-                f'<div style="display:flex;gap:6px;justify-content:flex-end;padding-top:8px;">'
-                f'<span class="badge {mode_class}">{EXECUTION_MODE.title()}</span>'
+                f'<div style="display:flex;gap:8px;justify-content:flex-end;align-items:center;padding-top:5px;">'
+                f'{mode_html}'
                 f'<span class="badge" style="background:rgba(0,245,160,0.08);color:var(--accent-emerald);">'
                 f'<span class="status-dot status-running"></span>Running</span>'
                 f'</div>',

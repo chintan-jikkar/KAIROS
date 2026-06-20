@@ -11,6 +11,8 @@ from dashboard.db import get_session
 from dashboard.components.sidebar import render_sidebar
 from dashboard.components.header import render_header
 from dashboard.components.strategy_card import render_strategy_card
+from dashboard.components.manual_trade import render_manual_paper_trade_button
+from dashboard.components.market_quotes import fetch_quote
 from database.models import Trade
 
 st.set_page_config(page_title="KAIROS · Strategies", page_icon="⚡", layout="wide")
@@ -32,6 +34,13 @@ INACTIVE_LIBRARY = [
 
 params_path = Path(__file__).parent.parent.parent / "config" / "strategy_params.json"
 all_params = json.loads(params_path.read_text()) if params_path.exists() else {}
+
+universe_cache_path = Path(__file__).parent.parent.parent / "config" / "universe_cache.json"
+_universe = json.loads(universe_cache_path.read_text()) if universe_cache_path.exists() else []
+
+
+def _universe_symbols_for(strategy_id: str) -> list[str]:
+    return [s["symbol"] for s in _universe if s.get("assigned_strategy") == strategy_id]
 
 left_col, right_col = st.columns([1.3, 1])
 
@@ -63,6 +72,18 @@ with left_col:
             params = all_params.get(strategy_id, {})
             st.json(params)
             st.caption("Parameter editing writes to config/strategy_params.json — wire-up pending.")
+
+        with st.expander(f"Try {strategy_id} on paper before deploying"):
+            candidate_symbols = symbols or _universe_symbols_for(strategy_id)
+            if not candidate_symbols:
+                st.caption("No candidate symbols yet — run the screener first.")
+            else:
+                pick = st.selectbox("Symbol", candidate_symbols, key=f"try_pick_{strategy_id}")
+                quote = fetch_quote(f"{pick}.NS")
+                render_manual_paper_trade_button(
+                    pick, market="INDIA",
+                    current_price=quote["price"] if quote else None,
+                )
 
     st.markdown('<p style="color:var(--text-secondary);font-size:13px;margin:20px 0 8px;">Strategy library — inactive</p>', unsafe_allow_html=True)
     for name in INACTIVE_LIBRARY:

@@ -13,6 +13,11 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 DB_PATH = os.getenv("DB_PATH", str(PROJECT_ROOT / "database" / "kairos.db"))
 LOG_PATH = os.getenv("LOG_PATH", str(PROJECT_ROOT / "logs" / "kairos.log"))
 
+# The dashboard intentionally runs on a plain interpreter without pandas-ta (see memory
+# checkpoint for why). Anything needing engine/data.indicators (the screener, signal
+# generation) is delegated to this venv via subprocess instead of importing in-process.
+ENGINE_PYTHON = os.getenv("ENGINE_PYTHON", str(PROJECT_ROOT / "kairos_env" / "bin" / "python3"))
+
 # Capital
 STARTING_CAPITAL_INR = float(os.getenv("STARTING_CAPITAL_INR", 10000))
 STARTING_CAPITAL_USD = float(os.getenv("STARTING_CAPITAL_USD", 100))
