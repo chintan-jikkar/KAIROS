@@ -155,12 +155,12 @@ def add_volume_ratio(df: pd.DataFrame, period: int = 20) -> pd.DataFrame:
 
 
 # --------------------------------------------------------------------------- #
-# Convenience — add all indicators needed by the 3 strategies in one call      #
+# Convenience — add all indicators needed by the strategies in one call        #
 # --------------------------------------------------------------------------- #
 
 def add_all_strategy_indicators(df: pd.DataFrame) -> pd.DataFrame:
     add_sma(df, [20, 50, 200])
-    add_ema(df, [9, 20])
+    add_ema(df, [9, 20, 50, 200])
     add_rsi(df, [2, 14])
     add_atr(df, 14)
     add_atr_pct(df, 14)

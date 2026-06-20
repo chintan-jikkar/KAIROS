@@ -27,6 +27,8 @@ STRATEGY_NAMES = {
     "RSI2_OVN": "RSI-2 overnight mean reversion",
     "ORB_BRK": "Opening range breakout",
     "MOM_CONT": "Momentum continuation",
+    "TREND_EMA": "Trend following (50/200 EMA cross)",
+    "BB_MEANREV": "Intraday Bollinger mean reversion",
 }
 
 left_col, right_col = st.columns([1, 1.6])

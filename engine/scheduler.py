@@ -4,10 +4,13 @@ Run this as the main algo process: python engine/scheduler.py
 
 Jobs:
   09:00 IST Mon–Fri  — morning health check
+  09:00–14:45 IST    — BB_MEANREV scan every 15 min
+  09:20 IST Mon–Fri  — strategy-driven exit check (RSI2_OVN, TREND_EMA, etc.)
   09:30 IST Mon–Fri  — confirm MOM_CONT deferred signals from previous EOD
   10:00–11:30 IST    — ORB scan every 15 min
-  15:00 IST Mon–Fri  — EOD entry scan (RSI2_OVN + MOM_CONT flags)
-  15:20 IST Mon–Fri  — force-exit all open MOM_CONT + ORB positions
+  15:00 IST Mon–Fri  — EOD entry scan (RSI2_OVN, MOM_CONT flags, TREND_EMA)
+  15:15 IST Mon–Fri  — strategy-driven exit check (second pass)
+  15:20 IST Mon–Fri  — force-exit all open MOM_CONT + ORB_BRK + BB_MEANREV positions
   15:30 IST Mon–Fri  — take portfolio snapshot
   Sunday 20:00 IST   — run weekly screener, refresh universe
 """
@@ -34,7 +37,10 @@ from database.models import Base
 from database.portfolio import get_latest_snapshot
 from engine.executor import Executor
 from engine.screener import run_india_screener
-from engine.signals import run_eod_scan, run_orb_scan, confirm_momentum_entries
+from engine.signals import (
+    run_eod_scan, run_orb_scan, run_meanrev_scan,
+    confirm_momentum_entries, check_exits_for_open_trades,
+)
 
 IST = pytz.timezone("Asia/Kolkata")
 
@@ -139,6 +145,43 @@ def job_orb_scan():
     db.close()
 
 
+def job_meanrev_scan():
+    """09:00–14:45 IST every 15 min — check for BB_MEANREV intraday signals."""
+    db = _make_session()
+    snap = get_latest_snapshot(db, ACTIVE_MARKET)
+    capital = snap.portfolio_value if snap else STARTING_CAPITAL_INR
+    broker = PaperBroker(db, capital)
+    executor = _make_executor(db, broker)
+
+    signals = run_meanrev_scan(_active_universe, db, ACTIVE_MARKET)
+    for signal in signals:
+        result = executor.execute_entry(signal)
+        logger.info(f"BB_MEANREV entry: {signal['symbol']} → {result['status']} ({result['reason']})")
+
+    db.close()
+
+
+def job_check_exits():
+    """
+    09:20 and 15:15 IST — check open RSI2_OVN/TREND_EMA (and any other
+    non-force-exited) positions against their own should_exit() logic.
+    ORB_BRK/MOM_CONT/BB_MEANREV are also covered here for anything that
+    should exit before the hard 15:20 EOD force-exit catches them.
+    """
+    db = _make_session()
+    snap = get_latest_snapshot(db, ACTIVE_MARKET)
+    capital = snap.portfolio_value if snap else STARTING_CAPITAL_INR
+    broker = PaperBroker(db, capital)
+    executor = _make_executor(db, broker)
+
+    to_exit = check_exits_for_open_trades(db)
+    for item in to_exit:
+        result = executor.execute_exit(item["symbol"], item["exit_price"], item["exit_reason"])
+        logger.info(f"Strategy-driven exit: {item['symbol']} ({item['exit_reason']}) → {result['status']}")
+
+    db.close()
+
+
 def job_eod_scan():
     """15:00 IST — RSI2_OVN entries + MOM_CONT flags for next day."""
     global _pending_momentum_signals
@@ -172,7 +215,7 @@ def job_eod_exit():
     executor = _make_executor(db, broker)
 
     from database.trade_log import get_open_trades
-    intraday_strategies = {"MOM_CONT", "ORB_BRK"}
+    intraday_strategies = {"MOM_CONT", "ORB_BRK", "BB_MEANREV"}
     intraday_trades = [
         t for t in get_open_trades(db) if t.strategy_id in intraday_strategies
     ]
@@ -253,6 +296,16 @@ def main():
     # ORB scan every 15 min from 10:00 to 11:30 IST
     scheduler.add_job(job_orb_scan, CronTrigger(
         hour="10,11", minute="0,15,30,45", day_of_week="mon-fri", timezone=IST))
+
+    # BB_MEANREV scan every 15 min from 09:45 to 15:00 IST
+    scheduler.add_job(job_meanrev_scan, CronTrigger(
+        hour="9,10,11,12,13,14", minute="0,15,30,45", day_of_week="mon-fri", timezone=IST))
+
+    # Strategy-driven exit check (RSI2_OVN next-open exit timing + TREND_EMA daily check)
+    scheduler.add_job(job_check_exits, CronTrigger(
+        hour=9, minute=20, day_of_week="mon-fri", timezone=IST))
+    scheduler.add_job(job_check_exits, CronTrigger(
+        hour=15, minute=15, day_of_week="mon-fri", timezone=IST))
 
     # EOD entry scan
     scheduler.add_job(job_eod_scan, CronTrigger(

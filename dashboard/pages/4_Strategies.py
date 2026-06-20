@@ -27,9 +27,11 @@ STRATEGY_LIBRARY = {
     "RSI2_OVN": "RSI-2 overnight mean reversion",
     "ORB_BRK": "Opening range breakout",
     "MOM_CONT": "Momentum continuation",
+    "TREND_EMA": "Trend following (50/200 EMA cross)",
+    "BB_MEANREV": "Intraday Bollinger mean reversion",
 }
 INACTIVE_LIBRARY = [
-    "Bollinger band squeeze", "Dual EMA crossover", "VWAP reclaim", "Gap and go",
+    "Dual EMA crossover", "VWAP reclaim", "Gap and go",
 ]
 
 params_path = Path(__file__).parent.parent.parent / "config" / "strategy_params.json"

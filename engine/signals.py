@@ -13,18 +13,24 @@ from loguru import logger
 from sqlalchemy.orm import Session
 
 from data.market_data import fetch_india_daily, fetch_india_intraday
-from data.indicators import add_all_strategy_indicators, add_volume_sma
+from data.indicators import add_all_strategy_indicators, add_volume_sma, add_bbands
 from database.models import Signal
 from strategies.rsi2_overnight import RSI2OvernightStrategy
 from strategies.orb_breakout import ORBBreakoutStrategy
 from strategies.momentum_continuation import MomentumContinuationStrategy
+from strategies.trend_ema import TrendEMAStrategy
+from strategies.bb_meanrev import BBMeanReversionStrategy
 
+# Strategies evaluated on intraday (15-min) bars rather than daily bars
+INTRADAY_STRATEGIES = ("ORB_BRK", "BB_MEANREV")
 
 # Active strategy registry — add / remove strategies here
 STRATEGY_REGISTRY = {
     "RSI2_OVN": RSI2OvernightStrategy,
     "ORB_BRK": ORBBreakoutStrategy,
     "MOM_CONT": MomentumContinuationStrategy,
+    "TREND_EMA": TrendEMAStrategy,
+    "BB_MEANREV": BBMeanReversionStrategy,
 }
 
 
@@ -35,7 +41,8 @@ def run_eod_scan(
     market_is_green: bool = True,
 ) -> list[dict]:
     """
-    End-of-day scan (15:00–15:30 IST). Runs RSI2_OVN and MOM_CONT.
+    End-of-day scan (15:00–15:30 IST). Runs every daily-bar strategy: RSI2_OVN,
+    MOM_CONT, TREND_EMA. Intraday strategies (ORB_BRK, BB_MEANREV) run separately.
     universe: list of screener output dicts [{symbol, assigned_strategy, ...}]
     Returns list of actionable signal dicts (to be passed to executor).
     """
@@ -45,8 +52,7 @@ def run_eod_scan(
         symbol = stock["symbol"]
         assigned = stock.get("assigned_strategy", "RSI2_OVN")
 
-        # Skip ORB in EOD scan — ORB runs intraday
-        if assigned == "ORB_BRK":
+        if assigned in INTRADAY_STRATEGIES:
             continue
 
         if assigned not in STRATEGY_REGISTRY:
@@ -124,6 +130,109 @@ def run_orb_scan(
             actionable.append(signal)
 
     return actionable
+
+
+def run_meanrev_scan(
+    universe: list[dict],
+    db: Session,
+    market: str = "INDIA",
+) -> list[dict]:
+    """
+    Intraday scan for BB_MEANREV signals — runs every 15 min through the day.
+    Bollinger bands are recomputed here with the strategy's own entry_std,
+    since the shared add_all_strategy_indicators() default (std=2.0) is tuned
+    for the daily-bar strategies, not this one's intraday width.
+    """
+    actionable: list[dict] = []
+    strategy = BBMeanReversionStrategy()
+
+    meanrev_symbols = [s["symbol"] for s in universe if s.get("assigned_strategy") == "BB_MEANREV"]
+
+    for symbol in meanrev_symbols:
+        try:
+            df_intra = fetch_india_intraday(symbol, interval="15m", period="1d")
+            if df_intra.empty or len(df_intra) < strategy.params["bb_period"]:
+                continue
+
+            add_bbands(df_intra, period=strategy.params["bb_period"], std=strategy.params["entry_std"])
+            signal = strategy.generate_signal(symbol, df_intra)
+        except Exception as exc:
+            logger.error(f"Mean-reversion scan failed for {symbol}: {exc}")
+            continue
+
+        executed = signal is not None
+        _persist_signal(db, symbol, "BB_MEANREV", market, signal, executed)
+
+        if signal:
+            actionable.append(signal)
+
+    return actionable
+
+
+def check_exits_for_open_trades(db: Session) -> list[dict]:
+    """
+    Checks every open trade against its own strategy's should_exit() logic using
+    the latest available bar. Returns a list of {trade_id, symbol, exit_price,
+    exit_reason} dicts for the caller to actually execute via Executor.
+
+    This exists because only ORB_BRK/MOM_CONT get a hardcoded EOD force-exit —
+    RSI2_OVN and TREND_EMA positions only close via their own should_exit logic
+    (RSI>65/stop/time-stop; death-cross/stop respectively), which nothing was
+    previously calling on a schedule.
+    """
+    from database.trade_log import get_open_trades
+
+    to_exit: list[dict] = []
+    open_trades = get_open_trades(db)
+
+    for trade in open_trades:
+        strategy_cls = STRATEGY_REGISTRY.get(trade.strategy_id)
+        if not strategy_cls:
+            continue
+        strategy = strategy_cls()
+
+        try:
+            if trade.strategy_id in INTRADAY_STRATEGIES:
+                df = fetch_india_intraday(trade.symbol, interval="15m", period="1d")
+                if df.empty:
+                    continue
+                if trade.strategy_id == "BB_MEANREV":
+                    add_bbands(df, period=strategy.params["bb_period"], std=strategy.params["entry_std"])
+                current_bar = df.iloc[-1].to_dict()
+            else:
+                df = fetch_india_daily(trade.symbol, period="1y")
+                if df.empty:
+                    continue
+                df = add_all_strategy_indicators(df)
+                current_bar = df.iloc[-1].to_dict()
+
+            hold_hours = (datetime.utcnow() - trade.timestamp_entry).total_seconds() / 3600
+            current_bar["hold_days"] = hold_hours / 24
+            current_bar["hold_candles"] = hold_hours / 0.25
+
+            trade_dict = {
+                "entry_price": trade.entry_price,
+                "stop_loss_price": trade.stop_loss_price,
+                "target_price": trade.target_price,
+                "direction": trade.direction,
+                "hold_days": current_bar["hold_days"],
+                "hold_candles": current_bar["hold_candles"],
+                "exit_timing": "next_open",
+            }
+
+            should_exit, reason = strategy.should_exit(trade_dict, current_bar)
+            if should_exit:
+                to_exit.append({
+                    "trade_id": trade.trade_id,
+                    "symbol": trade.symbol,
+                    "exit_price": float(current_bar.get("close", trade.entry_price)),
+                    "exit_reason": reason,
+                })
+        except Exception as exc:
+            logger.error(f"Exit check failed for {trade.symbol} ({trade.trade_id}): {exc}")
+            continue
+
+    return to_exit
 
 
 def confirm_momentum_entries(

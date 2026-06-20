@@ -83,12 +83,13 @@ def _evaluate_symbol(symbol: str) -> dict | None:
         return None
 
     vol_ratio = float(last.get("vol_ratio_20", 1.0))
+    adx = float(last.get("adx_14")) if last.get("adx_14") is not None else None
 
     # Beta is not available via yfinance easily — approximate from 90-day correlation with NIFTY
     # For now default to 1.0; will be populated when live Kite data is available
     beta = 1.0
 
-    strategy = _assign_strategy(atr_pct=atr_pct, beta=beta, vol_ratio=vol_ratio)
+    strategy = _assign_strategy(atr_pct=atr_pct, beta=beta, vol_ratio=vol_ratio, adx=adx)
 
     return {
         "symbol": symbol,
@@ -98,15 +99,16 @@ def _evaluate_symbol(symbol: str) -> dict | None:
         "avg_volume": int(avg_vol),
         "rsi14": round(rsi14, 1),
         "beta": beta,
+        "adx": round(adx, 1) if adx is not None else None,
         "assigned_strategy": strategy,
         "score": 0.0,  # filled by caller after normalisation
     }
 
 
-def _assign_strategy(atr_pct: float, beta: float, vol_ratio: float) -> str:
+def _assign_strategy(atr_pct: float, beta: float, vol_ratio: float, adx: float | None = None) -> str:
     rules = STRATEGY_ASSIGNMENT_RULES
 
-    # Priority: highest ATR gets MOM_CONT, then ORB_BRK, else RSI2_OVN
+    # Priority cascade: most specific/extreme conditions first, RSI2_OVN is the catch-all.
     if (atr_pct >= rules["MOM_CONT"]["atr_min"]
             and vol_ratio >= rules["MOM_CONT"]["volume_ratio_min"]):
         return "MOM_CONT"
@@ -114,5 +116,13 @@ def _assign_strategy(atr_pct: float, beta: float, vol_ratio: float) -> str:
     if (atr_pct >= rules["ORB_BRK"]["atr_min"]
             and beta >= rules["ORB_BRK"]["beta_min"]):
         return "ORB_BRK"
+
+    if (adx is not None and adx >= rules["TREND_EMA"]["adx_min"]
+            and atr_pct <= rules["TREND_EMA"]["atr_max"]):
+        return "TREND_EMA"
+
+    if (adx is not None and adx <= rules["BB_MEANREV"]["adx_max"]
+            and atr_pct >= rules["BB_MEANREV"]["atr_min"]):
+        return "BB_MEANREV"
 
     return "RSI2_OVN"

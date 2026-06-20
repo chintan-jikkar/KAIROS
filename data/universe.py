@@ -45,11 +45,17 @@ US_SCREEN_CRITERIA = {
     "no_earnings_within_days": 10,
 }
 
-# Strategy assignment rules — used by screener to auto-assign each stock
+# Strategy assignment rules — used by screener to auto-assign each stock.
+# Priority cascade (see engine/screener.py::_assign_strategy): MOM_CONT > ORB_BRK >
+# TREND_EMA > BB_MEANREV > RSI2_OVN (catch-all default).
 STRATEGY_ASSIGNMENT_RULES = {
-    "RSI2_OVN":  {"beta_max": 1.3, "atr_max": 3.0},
-    "ORB_BRK":   {"atr_min": 2.5, "beta_min": 1.1},
-    "MOM_CONT":  {"atr_min": 3.0, "volume_ratio_min": 1.5},
+    "RSI2_OVN":   {"beta_max": 1.3, "atr_max": 3.0},
+    "ORB_BRK":    {"atr_min": 2.5, "beta_min": 0.95},  # beta is a 1.0 placeholder until live
+                                                         # Kite beta is wired up (Phase 6) — 0.95
+                                                         # keeps this reachable until then, was 1.1
+    "MOM_CONT":   {"atr_min": 3.0, "volume_ratio_min": 1.5},
+    "TREND_EMA":  {"adx_min": 25, "atr_max": 2.5},
+    "BB_MEANREV": {"adx_max": 20, "atr_min": 1.5},
 }
 
 # Flat list of all India symbols for convenience

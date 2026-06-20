@@ -291,8 +291,10 @@ STRATEGY_LABELS = {
     "RSI2_OVN": ("RSI-2 overnight", "Mean reversion"),
     "ORB_BRK": ("Opening range breakout", "Momentum"),
     "MOM_CONT": ("Momentum continuation", "Next-day intraday"),
+    "TREND_EMA": ("Trend following", "50/200 EMA cross"),
+    "BB_MEANREV": ("Bollinger mean reversion", "Intraday"),
 }
-strat_cols = st.columns(3)
+strat_cols = st.columns(len(STRATEGY_LABELS))
 for col, (strategy_id, (name, subtitle)) in zip(strat_cols, STRATEGY_LABELS.items()):
     with col:
         closed = db.query(Trade).filter(Trade.strategy_id == strategy_id, Trade.net_pnl.isnot(None)).all()
