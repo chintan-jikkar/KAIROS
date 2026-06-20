@@ -1,5 +1,6 @@
-"""Page 4 — Strategies: status cards for the 3 active strategies + a creator form stub."""
+"""Page 4 — Strategies: status cards for the 5 active strategies + a creator form stub."""
 import json
+from datetime import date
 from pathlib import Path
 
 import sys
@@ -58,11 +59,12 @@ with left_col:
         avg_rr = (sum(t.actual_rr_achieved or 0 for t in closed) / len(closed)) if closed else 0.0
         net_pnl = sum(t.net_pnl for t in closed) if closed else 0.0
         symbols = sorted({t.symbol for t in closed} | {t.symbol for t in db.query(Trade).filter(Trade.strategy_id == strategy_id, Trade.timestamp_exit.is_(None)).all()})
+        traded_today = any(t.timestamp_exit and t.timestamp_exit.date() == date.today() for t in closed)
 
         render_strategy_card(
             strategy_id=strategy_id,
             name=name,
-            is_running=open_count > 0,
+            is_running=open_count > 0 or traded_today,
             trade_count=len(closed),
             win_rate=win_rate,
             avg_rr=avg_rr,
@@ -85,6 +87,7 @@ with left_col:
                 render_manual_paper_trade_button(
                     pick, market="INDIA",
                     current_price=quote["price"] if quote else None,
+                    recommended_strategy=strategy_id,
                 )
 
     st.markdown('<p style="color:var(--text-secondary);font-size:13px;margin:20px 0 8px;">Strategy library — inactive</p>', unsafe_allow_html=True)

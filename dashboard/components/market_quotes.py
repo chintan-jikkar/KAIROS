@@ -5,6 +5,13 @@ import streamlit as st
 import yfinance as yf
 
 
+def logo_url(symbol: str) -> str:
+    """Free FMP company-logo image endpoint (no API key needed) — same source
+    QuantDeck uses. Verified it has real coverage for NSE tickers, not just US
+    (e.g. RELIANCE.NS, INFY, TCS all resolve to real logos)."""
+    return f"https://financialmodelingprep.com/image-stock/{symbol.upper()}.png"
+
+
 @st.cache_data(ttl=60)
 def fetch_quote(ticker: str) -> dict | None:
     try:

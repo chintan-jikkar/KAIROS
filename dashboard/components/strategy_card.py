@@ -15,7 +15,7 @@ def render_strategy_card(
     symbols: list[str] | None = None,
 ):
     status_class = "status-running" if is_running else "status-waiting"
-    status_text = "Running" if is_running else "Paused"
+    status_text = "Running" if is_running else "Waiting — no signal today"
     pnl_class = "positive" if net_pnl >= 0 else "negative"
     today_class = "positive" if today_pnl >= 0 else "negative"
     symbols_text = ", ".join(symbols) if symbols else "No symbols assigned"

@@ -39,7 +39,7 @@ def get_market_status(market: str) -> dict:
     return {"status": status, "label": label, "hours": hours, "local_time": now_local.strftime("%H:%M")}
 
 
-def render_market_status_badge(market: str):
+def _market_status_html(market: str) -> str:
     info = get_market_status(market)
     colors = {
         "open": ("var(--accent-emerald)", "rgba(0,245,160,0.08)", "rgba(0,245,160,0.3)"),
@@ -49,9 +49,19 @@ def render_market_status_badge(market: str):
     }
     color, bg, border = colors[info["status"]]
     dot = "●" if info["status"] in ("open", "closing_soon") else "○"
-    st.markdown(
+    return (
         f'<span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;'
         f'padding:4px 10px;border-radius:6px;background:{bg};border:0.5px solid {border};color:{color};">'
-        f'{dot} {market} {info["label"]} &middot; {info["hours"]}</span>',
-        unsafe_allow_html=True,
+        f'{dot} {market} {info["label"]} &middot; {info["hours"]}</span>'
     )
+
+
+def render_market_status_badge(market: str):
+    st.markdown(_market_status_html(market), unsafe_allow_html=True)
+
+
+def render_market_status_row(markets: list[str]):
+    """Multiple badges in one tight, left-aligned flex row instead of separate
+    equal-width columns (which stretches narrow badges across wide gaps)."""
+    badges = "".join(_market_status_html(m) for m in markets)
+    st.markdown(f'<div style="display:flex;gap:10px;">{badges}</div>', unsafe_allow_html=True)

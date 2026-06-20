@@ -31,6 +31,9 @@ all_trades = db.query(Trade).filter(Trade.timestamp_exit.isnot(None)).order_by(T
 df = trades_to_dataframe(all_trades)
 if not df.empty:
     df["direction"] = [t.direction for t in all_trades]
+else:
+    st.info("No closed trades yet — the logbook populates once trades start closing.")
+    st.stop()
 
 with st.expander("Filters", expanded=False):
     f1, f2, f3, f4 = st.columns(4)

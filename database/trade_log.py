@@ -189,8 +189,11 @@ def update_journal(
     return trade
 
 
-def get_open_trades(db: Session) -> list[Trade]:
-    return db.query(Trade).filter(Trade.timestamp_exit.is_(None)).all()
+def get_open_trades(db: Session, market: str | None = None) -> list[Trade]:
+    query = db.query(Trade).filter(Trade.timestamp_exit.is_(None))
+    if market is not None:
+        query = query.filter(Trade.market == market)
+    return query.all()
 
 
 def get_open_trade(db: Session, symbol: str) -> Trade | None:

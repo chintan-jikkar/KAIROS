@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&family=Bebas+Neue&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Bebas+Neue&display=swap');
 @import url('https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/3.35.0/tabler-icons-outline.min.css');
 
 :root {
@@ -25,6 +25,7 @@
 }
 
 [data-testid="stSidebarNav"] { display: none; }
+[data-testid="stSidebar"] [data-testid^="stBaseButton-header"] { display: none; }
 
 .stApp {
     background: var(--bg-primary);
@@ -36,8 +37,22 @@
     border-right: 1px solid var(--border-glass);
 }
 
+/* Streamlit's default 24px top gutter on sidebar content, same class of issue
+   as stMainBlockContainer's gutter above — pushes nav icons down from the top. */
+[data-testid="stSidebarUserContent"] {
+    padding-top: 0;
+}
+
 [data-testid="stHeader"] {
     background: transparent;
+}
+
+/* Streamlit reserves a large default top/bottom gutter (96px/160px) meant for a
+   plain st.title()-style layout — KAIROS's custom header replaces that, so the
+   gutter just shows up as dead space above every page. */
+[data-testid="stMainBlockContainer"] {
+    padding-top: 24px;
+    padding-bottom: 48px;
 }
 
 .glass-card {
@@ -63,7 +78,7 @@
     position: absolute;
     inset: 0;
     border-radius: inherit;
-    background: radial-gradient(circle 160px at 50% 30%, rgba(255,255,255,0.14), transparent 72%);
+    background: radial-gradient(circle 160px at var(--mx, 50%) var(--my, 30%), rgba(255,255,255,0.14), transparent 72%);
     opacity: 0;
     transition: opacity 0.3s ease;
     pointer-events: none;
@@ -71,6 +86,19 @@
 
 .glass-card:hover::after {
     opacity: 1;
+}
+
+/* Settings page: st.container(border=True, key="settings_*") containers styled to match .glass-card.
+   Can't use the .glass-card class directly since native widgets (selectbox, toggle, number_input...)
+   must be real st.* calls, not raw HTML — st.markdown can't open a div that later st.* calls render inside. */
+div[class*="st-key-settings_"] {
+    background: linear-gradient(180deg, rgba(255,255,255,0.09), rgba(255,255,255,0.025)) !important;
+    backdrop-filter: blur(var(--blur-amount));
+    -webkit-backdrop-filter: blur(var(--blur-amount));
+    border: 1px solid var(--border-glass) !important;
+    border-top-color: rgba(255,255,255,0.22) !important;
+    border-radius: 12px !important;
+    padding: 20px !important;
 }
 
 /* Charts/graphs opt out of the hover glow so it never competes with the chart's own tooltip */
@@ -98,22 +126,7 @@
 [data-testid="stSidebar"] a.kairos-nav-item:hover { color: rgba(255,255,255,0.85) !important; }
 [data-testid="stSidebar"] a.kairos-nav-item.active { color: var(--accent-gold) !important; }
 [data-testid="stSidebar"] a.kairos-nav-item i { font-size: 19px; line-height: 1; }
-[data-testid="stSidebar"] a.kairos-nav-item span { font-size: 9.5px; }
 [data-testid="stSidebar"] a.kairos-nav-item.collapsed { padding: 11px 0; }
-
-[data-testid="stSidebar"] button[kind] {
-    min-height: 28px !important;
-    height: 28px !important;
-    padding: 0 6px !important;
-    font-size: 13px !important;
-    background: transparent !important;
-    border: 1px solid var(--border-glass) !important;
-    color: rgba(255,255,255,0.5) !important;
-}
-[data-testid="stSidebar"] button[kind]:hover {
-    color: var(--accent-gold) !important;
-    border-color: rgba(240,192,64,0.4) !important;
-}
 
 @keyframes currencyFlash {
     0%   { opacity: 0.25; transform: scale(0.97); filter: brightness(1.8); }
@@ -139,6 +152,35 @@
     box-shadow: 0 0 14px rgba(255, 179, 71, 0.15);
 }
 .badge-paper-prominent .status-dot { background: var(--accent-amber); }
+
+.badge-live-prominent {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding: 7px 14px;
+    border-radius: 8px;
+    background: rgba(0, 245, 160, 0.14);
+    border: 1.5px solid rgba(0, 245, 160, 0.5);
+    color: var(--accent-emerald);
+    box-shadow: 0 0 14px rgba(0, 245, 160, 0.15);
+}
+
+@keyframes livePulse {
+    0%   { box-shadow: 0 0 0 0 rgba(0,245,160,0.55); }
+    70%  { box-shadow: 0 0 0 6px rgba(0,245,160,0); }
+    100% { box-shadow: 0 0 0 0 rgba(0,245,160,0); }
+}
+
+.pulse-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent-emerald);
+    animation: livePulse 1.6s ease-out infinite;
+}
 
 .positive { color: var(--accent-emerald); }
 .negative { color: var(--accent-crimson); }
@@ -221,4 +263,56 @@ hr {
 
 .stDataFrame, .stTable {
     background: var(--bg-glass);
+}
+
+/* Custom screener table — see render_screener_table() in 6_Markets.py */
+.screener-row {
+    display: grid;
+    gap: 8px;
+    align-items: center;
+    padding: 13px 14px;
+    border-bottom: 1px solid var(--border-glass);
+}
+.screener-header {
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    border-bottom: 1px solid var(--border-glass);
+    padding-bottom: 10px;
+}
+.screener-row.selected {
+    background: rgba(240,192,64,0.08);
+    border-radius: 6px;
+}
+
+div[class*="st-key-screener_row_"] {
+    position: relative;
+    border-radius: 6px;
+}
+div[class*="st-key-screener_row_"]:hover {
+    background: rgba(255,255,255,0.03);
+}
+/* Streamlit wraps the button in its own stElementContainer, which is already
+   position:relative with height:0 (collapsed, since its only child is about
+   to be absolutely positioned) — that intercepts inset:0 at the wrong level
+   before it reaches the row container above. Repositioning this wrapper
+   itself, then letting the button fill it via plain percentage sizing. */
+div[class*="st-key-screener_row_"] > [data-testid="stElementContainer"]:last-child {
+    position: absolute !important;
+    inset: 0 !important;
+    height: auto !important;
+}
+div[class*="st-key-screener_row_"] [data-testid="stButton"] {
+    width: 100%;
+    height: 100%;
+}
+div[class*="st-key-screener_row_"] [data-testid="stButton"] button {
+    width: 100%;
+    height: 100%;
+    min-height: unset;
+    opacity: 0;
+    cursor: pointer;
+    border: none;
+    background: transparent;
 }

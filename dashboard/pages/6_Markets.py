@@ -10,8 +10,8 @@ import streamlit as st
 
 from dashboard.components.sidebar import render_sidebar
 from dashboard.components.header import render_header
-from dashboard.components.market_quotes import fetch_quote
-from dashboard.components.market_hours import render_market_status_badge
+from dashboard.components.market_quotes import fetch_quote, logo_url
+from dashboard.components.market_hours import render_market_status_row
 from dashboard.components.manual_trade import render_manual_paper_trade_button
 from dashboard.components.news_feed import render_news_list
 from dashboard.components.equity_curve import KAIROS_CHART_LAYOUT
@@ -26,15 +26,8 @@ render_sidebar("Markets")
 db = get_session()
 render_header()
 
-top_row = st.columns([3, 2])
-with top_row[0]:
-    st.markdown('<h2 class="kairos-heading">Markets</h2>', unsafe_allow_html=True)
-with top_row[1]:
-    hc1, hc2 = st.columns(2)
-    with hc1:
-        render_market_status_badge("INDIA")
-    with hc2:
-        render_market_status_badge("US")
+st.markdown('<h2 class="kairos-heading">Markets</h2>', unsafe_allow_html=True)
+render_market_status_row(["INDIA", "US"])
 
 # --------------------------------------------------------------------------- #
 # Watchlist — pinned items reserved at a glance, persisted in the DB           #
@@ -78,6 +71,63 @@ with st.expander("Add to watchlist"):
 
 st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 tab_india, tab_us, tab_fx = st.tabs(["India", "US", "FX"])
+
+
+SCREENER_COLUMNS = [
+    ("", "28px"), ("Symbol", "1fr"), ("Price", "0.9fr"), ("ATR%", "0.7fr"),
+    ("Vol ratio", "0.8fr"), ("RSI14", "0.7fr"), ("Beta", "0.6fr"),
+    ("Strategy", "1.1fr"), ("Score", "0.7fr"),
+]
+SCREENER_GRID_TEMPLATE = " ".join(w for _, w in SCREENER_COLUMNS)
+
+
+def render_screener_table(df: pd.DataFrame, active_symbols: set[str]) -> str | None:
+    """Themed, click-anywhere-on-row replacement for st.dataframe. The canvas-
+    rendered grid looked like a spreadsheet (no control over its styling) and
+    row-selection only registered on a specific internal hotspot, not anywhere
+    in the row. Each row is a real st.container so the invisible full-size
+    button genuinely overlays the visual HTML (unlike stacking separate
+    st.markdown calls, which render as siblings, not nested)."""
+    sorted_df = df.sort_values("score", ascending=False).reset_index(drop=True)
+    selected = st.session_state.get("_screener_selected_symbol")
+
+    with st.container(border=True, key="screener_table_outer"):
+        header_html = "".join(f"<div>{label}</div>" for label, _ in SCREENER_COLUMNS)
+        st.markdown(
+            f'<div class="screener-row screener-header" '
+            f'style="grid-template-columns:{SCREENER_GRID_TEMPLATE};">{header_html}</div>',
+            unsafe_allow_html=True,
+        )
+
+        for _, row in sorted_df.iterrows():
+            symbol = row["symbol"]
+            is_active = symbol in active_symbols
+            is_selected = symbol == selected
+            row_html = (
+                f'<div class="screener-row {"selected" if is_selected else ""}" '
+                f'style="grid-template-columns:{SCREENER_GRID_TEMPLATE};">'
+                f'<div>{"●" if is_active else ""}</div>'
+                f'<div style="display:flex;align-items:center;gap:8px;">'
+                f'<img src="{logo_url(symbol + ".NS")}" loading="lazy" '
+                f'style="width:20px;height:20px;border-radius:4px;background:#fff;object-fit:contain;flex-shrink:0;" '
+                f'onerror="this.style.display=\'none\'"/>'
+                f'<span class="kairos-mono" style="font-weight:600;">{symbol}</span></div>'
+                f'<div class="kairos-mono">₹{row["price"]:,.2f}</div>'
+                f'<div class="kairos-mono">{row["atr_pct"]:.2f}%</div>'
+                f'<div class="kairos-mono">{row["vol_ratio"]:.2f}x</div>'
+                f'<div class="kairos-mono">{row["rsi14"]:.1f}</div>'
+                f'<div class="kairos-mono">{row["beta"]:.2f}</div>'
+                f'<div><span class="badge badge-long">{row["assigned_strategy"]}</span></div>'
+                f'<div class="kairos-mono" style="font-weight:600;">{row["score"]:.0f}</div>'
+                f'</div>'
+            )
+            with st.container(key=f"screener_row_{symbol}"):
+                st.markdown(row_html, unsafe_allow_html=True)
+                if st.button("", key=f"screener_select_{symbol}", use_container_width=True):
+                    st.session_state["_screener_selected_symbol"] = symbol
+                    st.rerun()
+
+    return selected
 
 
 def render_quote_card(label: str, ticker: str, prefix: str = ""):
@@ -125,7 +175,9 @@ with tab_india:
         run_clicked = st.button("Re-run screener", use_container_width=True)
 
     import json
+    from datetime import datetime as _dt
     cache_path = Path(__file__).parent.parent.parent / "config" / "universe_cache.json"
+    full_cache_path = Path(__file__).parent.parent.parent / "config" / "screener_full_cache.json"
 
     if run_clicked:
         with st.spinner("Screening India universe… (runs in the engine process, can take ~30s)"):
@@ -137,36 +189,40 @@ with tab_india:
                 top6 = sorted(full_results, key=lambda r: r["score"], reverse=True)[:6]
                 if top6:
                     cache_path.write_text(json.dumps(top6, indent=2))
+                full_cache_path.write_text(json.dumps(
+                    {"generated_at": _dt.now().strftime("%Y-%m-%d %H:%M:%S"), "results": full_results}, indent=2
+                ))
                 st.session_state["_screener_full_results"] = full_results
+                st.session_state["_screener_cached_at"] = "just now"
                 if full_results:
                     st.success(f"Screener ran — {len(full_results)} of ~25 pool stocks currently qualify, top 6 set as the active trading universe.")
                 else:
                     st.warning("Screener ran but 0 stocks currently meet the live filter criteria (ATR%, volume, RSI range). This can happen briefly intraday or outside market hours — try again later.")
 
+    # Fall back to the on-disk cache so the table is populated by default each session —
+    # 'Re-run screener' stays the only way to trigger a fresh (slow) engine run.
+    if st.session_state.get("_screener_full_results") is None and full_cache_path.exists():
+        cached = json.loads(full_cache_path.read_text())
+        st.session_state["_screener_full_results"] = cached["results"]
+        st.session_state["_screener_cached_at"] = cached["generated_at"]
+
     full_results = st.session_state.get("_screener_full_results", None)
     active_universe_symbols = {s["symbol"] for s in json.loads(cache_path.read_text())} if cache_path.exists() else set()
 
     if full_results:
+        cached_at = st.session_state.get("_screener_cached_at")
+        if cached_at and cached_at != "just now":
+            st.caption(f"Showing cached results from {cached_at}. Click 'Re-run screener' to refresh.")
         df = pd.DataFrame(full_results)
-        df["active"] = df["symbol"].apply(lambda s: "●" if s in active_universe_symbols else "")
-        display_df = df.rename(columns={
-            "active": "Active", "symbol": "Symbol", "price": "Price", "atr_pct": "ATR%", "vol_ratio": "Vol ratio",
-            "rsi14": "RSI14", "beta": "Beta", "assigned_strategy": "Strategy", "score": "Score",
-        })[["Active", "Symbol", "Price", "ATR%", "Vol ratio", "RSI14", "Beta", "Strategy", "Score"]]
-
-        event = st.dataframe(
-            display_df, use_container_width=True, height=380,
-            on_select="rerun", selection_mode="single-row", key="markets_screener_table",
-        )
-        selected_rows = event.selection.get("rows", []) if hasattr(event, "selection") else []
+        selected_symbol = render_screener_table(df, active_universe_symbols)
         st.caption("● marks stocks in the currently deployed top-6 universe. Click any row to open its deep dive below.")
     else:
-        st.info("No screener data loaded yet this session. Click 'Re-run screener' to evaluate the full India universe.")
-        selected_rows = []
+        st.info("No screener data yet. Click 'Re-run screener' to evaluate the full India universe — results are cached after that.")
+        selected_symbol = None
         df = pd.DataFrame()
 
-    if selected_rows and not df.empty:
-        sel = df.iloc[selected_rows[0]]
+    if selected_symbol and not df.empty:
+        sel = df[df["symbol"] == selected_symbol].iloc[0]
         st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
         st.markdown('<div class="glass-card">', unsafe_allow_html=True)
 
@@ -203,7 +259,10 @@ with tab_india:
                 add_to_watchlist(db, sel["symbol"], market="INDIA")
                 st.rerun()
 
-            render_manual_paper_trade_button(sel["symbol"], market="INDIA", current_price=sel["price"])
+            render_manual_paper_trade_button(
+                sel["symbol"], market="INDIA", current_price=sel["price"],
+                recommended_strategy=sel["assigned_strategy"],
+            )
 
         with dd2:
             price_df = fetch_india_daily(sel["symbol"], period="3mo")

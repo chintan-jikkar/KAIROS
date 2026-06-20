@@ -9,10 +9,12 @@ import pandas as pd
 import streamlit as st
 from sqlalchemy import func
 
-from config.settings import STARTING_CAPITAL_INR
+from config.settings import STARTING_CAPITAL_INR, STARTING_CAPITAL_USD
 from dashboard.db import get_session
 from dashboard.components.sidebar import render_sidebar
-from dashboard.components.header import render_header, fmt_currency, fmt_currency_signed, currency_symbol
+from dashboard.components.header import (
+    render_header, fmt_currency, fmt_currency_signed, currency_symbol, selected_market,
+)
 from dashboard.components.kpi_card import render_kpi_card
 from dashboard.components.equity_curve import render_equity_curve
 from dashboard.components.monthly_stats import render_monthly_grid
@@ -28,13 +30,14 @@ render_sidebar("Dashboard")
 db = get_session()
 render_header()
 
-USD_DIVISOR = 100
-divisor = USD_DIVISOR if st.session_state.get("currency") == "USD" else 1
+market = selected_market()
+starting_capital = STARTING_CAPITAL_USD if market == "US" else STARTING_CAPITAL_INR
 sym = currency_symbol()
 
 
 def _period_stats(start_date: date) -> dict:
     rows = db.query(Trade).filter(
+        Trade.market == market,
         Trade.net_pnl.isnot(None),
         func.date(Trade.timestamp_exit) >= start_date,
     ).all()
@@ -60,22 +63,25 @@ month_stats = _period_stats(today - timedelta(days=30))
 year_stats = _period_stats(today - timedelta(days=365))
 all_time_stats = _period_stats(date(2000, 1, 1))
 
-latest_snap = db.query(PortfolioSnapshot).order_by(PortfolioSnapshot.date.desc()).first()
-portfolio_value = latest_snap.portfolio_value if latest_snap else STARTING_CAPITAL_INR
+latest_snap = db.query(PortfolioSnapshot).filter(
+    PortfolioSnapshot.market == market
+).order_by(PortfolioSnapshot.date.desc()).first()
+portfolio_value = latest_snap.portfolio_value if latest_snap else starting_capital
 peak_value = (latest_snap.peak_value if latest_snap else portfolio_value) or portfolio_value
 drawdown_pct = (latest_snap.drawdown_from_peak_pct * 100) if latest_snap else 0.0
 
 today_closed = db.query(Trade).filter(
+    Trade.market == market,
     func.date(Trade.timestamp_exit) == today, Trade.net_pnl.isnot(None)
 ).all()
 today_pnl = sum(t.net_pnl for t in today_closed) if today_closed else 0.0
 today_pnl_pct = (today_pnl / portfolio_value * 100) if portfolio_value else 0.0
 
 active_signals_today = db.query(func.count(Signal.signal_id)).filter(
-    func.date(Signal.generated_at) == today
+    Signal.market == market, func.date(Signal.generated_at) == today
 ).scalar() or 0
 strategies_live_today = db.query(func.count(Signal.strategy_id.distinct())).filter(
-    func.date(Signal.generated_at) == today, Signal.was_executed.is_(True)
+    Signal.market == market, func.date(Signal.generated_at) == today, Signal.was_executed.is_(True)
 ).scalar() or 0
 
 st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
@@ -120,7 +126,7 @@ with hero_cols[2]:
                 <i class="ti ti-radar-2" style="font-size:15px;color:rgba(255,255,255,0.3);"></i>
             </div>
             <p class="kpi-value" style="font-size:22px;margin:0 0 5px;">{active_signals_today}</p>
-            <p class="kpi-sub" style="margin:0;">{strategies_live_today} strategies live</p>
+            <p style="font-size:12px;color:var(--text-secondary);margin:0;">{strategies_live_today} strategies live</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -144,6 +150,8 @@ with hero_cols[3]:
         unsafe_allow_html=True,
     )
 
+st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
+
 perf_cols = st.columns(4)
 perf_data = [
     ("This week", week_stats, "emerald"),
@@ -162,15 +170,17 @@ main_col, side_col = st.columns([2.1, 1])
 with main_col:
     st.markdown('<div class="glass-card no-glow">', unsafe_allow_html=True)
     st.markdown('<p style="color:var(--text-secondary);font-size:13px;margin-bottom:8px;">Equity curve</p>', unsafe_allow_html=True)
-    snapshots = db.query(PortfolioSnapshot).order_by(PortfolioSnapshot.date).all()
+    snapshots = db.query(PortfolioSnapshot).filter(
+        PortfolioSnapshot.market == market
+    ).order_by(PortfolioSnapshot.date).all()
     snap_df = pd.DataFrame([{"date": s.date, "portfolio_value": s.portfolio_value} for s in snapshots])
-    render_equity_curve(snap_df, symbol=sym, divisor=divisor)
+    render_equity_curve(snap_df, symbol=sym)
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
 
     trades_for_grid = db.query(Trade).filter(
-        Trade.net_pnl.isnot(None), Trade.timestamp_exit.isnot(None)
+        Trade.market == market, Trade.net_pnl.isnot(None), Trade.timestamp_exit.isnot(None)
     ).all()
     grid_df = pd.DataFrame([
         {"year": t.timestamp_exit.year, "month": t.timestamp_exit.month, "return_pct": t.net_pnl_pct * 100}
@@ -207,8 +217,10 @@ with side_col:
 
     st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 
-    open_trades = get_open_trades(db)
-    closed_trades = db.query(Trade).filter(Trade.timestamp_exit.isnot(None)).order_by(Trade.timestamp_exit.desc()).limit(10).all()
+    open_trades = get_open_trades(db, market=market)
+    closed_trades = db.query(Trade).filter(
+        Trade.market == market, Trade.timestamp_exit.isnot(None)
+    ).order_by(Trade.timestamp_exit.desc()).limit(10).all()
 
     tab_open, tab_closed = st.tabs(["Open", "Closed"])
     with tab_open:
@@ -297,7 +309,9 @@ STRATEGY_LABELS = {
 strat_cols = st.columns(len(STRATEGY_LABELS))
 for col, (strategy_id, (name, subtitle)) in zip(strat_cols, STRATEGY_LABELS.items()):
     with col:
-        closed = db.query(Trade).filter(Trade.strategy_id == strategy_id, Trade.net_pnl.isnot(None)).all()
+        closed = db.query(Trade).filter(
+            Trade.market == market, Trade.strategy_id == strategy_id, Trade.net_pnl.isnot(None)
+        ).all()
         wins = [t for t in closed if t.outcome == "WIN"]
         win_rate = (len(wins) / len(closed) * 100) if closed else 0.0
         today_strat_pnl = sum(t.net_pnl for t in closed if t.timestamp_exit and t.timestamp_exit.date() == today) if closed else 0.0
