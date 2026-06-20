@@ -44,6 +44,9 @@ logs/*.log
 # Claude Code local config (never tracked)
 .claude/
 
+# Isolated git worktrees for feature work
+.worktrees/
+
 # Testing
 .pytest_cache/
 .coverage
