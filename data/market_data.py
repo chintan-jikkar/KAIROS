@@ -11,15 +11,23 @@ from loguru import logger
 # India — NSE via yfinance (.NS suffix)                                        #
 # --------------------------------------------------------------------------- #
 
-def fetch_india_daily(symbol: str, period: str = "1y") -> pd.DataFrame:
+def fetch_india_daily(symbol: str, period: str = "1y",
+                      start: str | None = None, end: str | None = None) -> pd.DataFrame:
     """
     Fetch daily OHLCV for an NSE symbol.
     symbol: bare NSE ticker, e.g. "RELIANCE" (we append .NS automatically)
-    period: yfinance period string — "1mo", "3mo", "6mo", "1y", "2y"
+    period: yfinance period string — "1mo", "3mo", "6mo", "1y", "2y" — ignored if start/end given.
+    start, end: optional fixed historical window ("YYYY-MM-DD"), e.g. for backtesting a
+    specific date range. Takes priority over `period` when given, matching yfinance's own
+    precedence — existing call sites that only pass `period` are unaffected.
     """
     ticker = f"{symbol}.NS"
-    df = yf.download(ticker, period=period, interval="1d",
-                     auto_adjust=True, progress=False)
+    if start or end:
+        df = yf.download(ticker, start=start, end=end, interval="1d",
+                         auto_adjust=True, progress=False)
+    else:
+        df = yf.download(ticker, period=period, interval="1d",
+                         auto_adjust=True, progress=False)
     if df.empty:
         logger.warning(f"No data returned for {ticker}")
         return pd.DataFrame()
