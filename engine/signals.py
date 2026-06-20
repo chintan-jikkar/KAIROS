@@ -20,6 +20,8 @@ from strategies.orb_breakout import ORBBreakoutStrategy
 from strategies.momentum_continuation import MomentumContinuationStrategy
 from strategies.trend_ema import TrendEMAStrategy
 from strategies.bb_meanrev import BBMeanReversionStrategy
+from strategies.donchian_breakout import DonchianBreakoutStrategy
+from strategies.supertrend import SupertrendStrategy
 
 # Strategies evaluated on intraday (15-min) bars rather than daily bars
 INTRADAY_STRATEGIES = ("ORB_BRK", "BB_MEANREV")
@@ -31,6 +33,8 @@ STRATEGY_REGISTRY = {
     "MOM_CONT": MomentumContinuationStrategy,
     "TREND_EMA": TrendEMAStrategy,
     "BB_MEANREV": BBMeanReversionStrategy,
+    "DONCHIAN_BRK": DonchianBreakoutStrategy,
+    "SUPERTREND": SupertrendStrategy,
 }
 
 

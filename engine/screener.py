@@ -13,6 +13,7 @@ from data.universe import (
     INDIA_SCREEN_CRITERIA,
     STRATEGY_ASSIGNMENT_RULES,
 )
+from engine.signals import STRATEGY_REGISTRY
 
 
 def run_india_screener(top_n: int | None = 6) -> list[dict]:
@@ -89,7 +90,12 @@ def _evaluate_symbol(symbol: str) -> dict | None:
     # For now default to 1.0; will be populated when live Kite data is available
     beta = 1.0
 
-    strategy = _assign_strategy(atr_pct=atr_pct, beta=beta, vol_ratio=vol_ratio, adx=adx)
+    strategy_id = _assign_strategy(atr_pct=atr_pct, beta=beta, vol_ratio=vol_ratio, adx=adx)
+
+    # Reuses the df already fetched/indicator-computed above — assignment is about which
+    # strategy's regime fits the stock, not that its entry conditions are met today, so most
+    # rows won't have a live signal. Real target/stop only show up when one actually fires.
+    signal = STRATEGY_REGISTRY[strategy_id]().generate_signal(symbol, df)
 
     return {
         "symbol": symbol,
@@ -100,7 +106,9 @@ def _evaluate_symbol(symbol: str) -> dict | None:
         "rsi14": round(rsi14, 1),
         "beta": beta,
         "adx": round(adx, 1) if adx is not None else None,
-        "assigned_strategy": strategy,
+        "assigned_strategy": strategy_id,
+        "has_live_signal": signal is not None,
+        "target_price": round(signal["target_price"], 2) if signal else None,
         "score": 0.0,  # filled by caller after normalisation
     }
 
@@ -117,9 +125,16 @@ def _assign_strategy(atr_pct: float, beta: float, vol_ratio: float, adx: float |
             and beta >= rules["ORB_BRK"]["beta_min"]):
         return "ORB_BRK"
 
+    if (adx is not None and adx >= rules["SUPERTREND"]["adx_min"]
+            and atr_pct >= rules["SUPERTREND"]["atr_min"]):
+        return "SUPERTREND"
+
     if (adx is not None and adx >= rules["TREND_EMA"]["adx_min"]
             and atr_pct <= rules["TREND_EMA"]["atr_max"]):
         return "TREND_EMA"
+
+    if (adx is not None and rules["DONCHIAN_BRK"]["adx_min"] <= adx < rules["DONCHIAN_BRK"]["adx_max"]):
+        return "DONCHIAN_BRK"
 
     if (adx is not None and adx <= rules["BB_MEANREV"]["adx_max"]
             and atr_pct >= rules["BB_MEANREV"]["atr_min"]):

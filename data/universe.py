@@ -47,15 +47,21 @@ US_SCREEN_CRITERIA = {
 
 # Strategy assignment rules — used by screener to auto-assign each stock.
 # Priority cascade (see engine/screener.py::_assign_strategy): MOM_CONT > ORB_BRK >
-# TREND_EMA > BB_MEANREV > RSI2_OVN (catch-all default).
+# SUPERTREND > TREND_EMA > DONCHIAN_BRK > BB_MEANREV > RSI2_OVN (catch-all default).
+# SUPERTREND and DONCHIAN_BRK added 2026-06-20 (docs/strategy-library.md) — both
+# slotted into ADX/ATR bands that don't overlap the 5 original strategies:
+# SUPERTREND takes the high-ADX+high-ATR names TREND_EMA's atr_max excludes;
+# DONCHIAN_BRK takes the ADX 20-25 gap between BB_MEANREV's and TREND_EMA's bands.
 STRATEGY_ASSIGNMENT_RULES = {
-    "RSI2_OVN":   {"beta_max": 1.3, "atr_max": 3.0},
-    "ORB_BRK":    {"atr_min": 2.5, "beta_min": 0.95},  # beta is a 1.0 placeholder until live
-                                                         # Kite beta is wired up (Phase 6) — 0.95
-                                                         # keeps this reachable until then, was 1.1
-    "MOM_CONT":   {"atr_min": 3.0, "volume_ratio_min": 1.5},
-    "TREND_EMA":  {"adx_min": 25, "atr_max": 2.5},
-    "BB_MEANREV": {"adx_max": 20, "atr_min": 1.5},
+    "RSI2_OVN":     {"beta_max": 1.3, "atr_max": 3.0},
+    "ORB_BRK":      {"atr_min": 2.5, "beta_min": 0.95},  # beta is a 1.0 placeholder until live
+                                                           # Kite beta is wired up (Phase 6) — 0.95
+                                                           # keeps this reachable until then, was 1.1
+    "MOM_CONT":     {"atr_min": 3.0, "volume_ratio_min": 1.5},
+    "SUPERTREND":   {"adx_min": 25, "atr_min": 2.5},
+    "TREND_EMA":    {"adx_min": 25, "atr_max": 2.5},
+    "DONCHIAN_BRK": {"adx_min": 20, "adx_max": 25},
+    "BB_MEANREV":   {"adx_max": 20, "atr_min": 1.5},
 }
 
 # Flat list of all India symbols for convenience

@@ -45,7 +45,9 @@ def add_supertrend(df: pd.DataFrame,
                        length=period, multiplier=multiplier)
     if st is not None:
         col = f"SUPERT_{period}_{multiplier}"
+        dir_col = f"SUPERTd_{period}_{multiplier}"
         df["supertrend"] = st[col] if col in st.columns else st.iloc[:, 0]
+        df["supertrend_direction"] = st[dir_col] if dir_col in st.columns else None
     return df
 
 
@@ -117,6 +119,16 @@ def add_bbands(df: pd.DataFrame,
     return df
 
 
+def add_donchian(df: pd.DataFrame, periods: list[int] = [10, 20]) -> pd.DataFrame:
+    """Rolling channel high/low, shifted by 1 bar so today's own high/low isn't
+    part of the channel it's compared against — needed for breakout detection
+    (today broke yesterday's channel) and as a trailing-stop level."""
+    for p in periods:
+        df[f"donchian_upper_{p}"] = df["high"].shift(1).rolling(window=p).max()
+        df[f"donchian_lower_{p}"] = df["low"].shift(1).rolling(window=p).min()
+    return df
+
+
 def add_keltner(df: pd.DataFrame,
                 period: int = 20, multiplier: float = 2.0) -> pd.DataFrame:
     kc = ta.kc(df["high"], df["low"], df["close"],
@@ -169,4 +181,6 @@ def add_all_strategy_indicators(df: pd.DataFrame) -> pd.DataFrame:
     add_volume_ratio(df, 20)
     add_obv(df)
     add_adx(df)
+    add_donchian(df, [10, 20])
+    add_supertrend(df)
     return df
