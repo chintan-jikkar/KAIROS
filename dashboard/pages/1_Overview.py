@@ -15,6 +15,8 @@ from dashboard.components.sidebar import render_sidebar
 from dashboard.components.header import (
     render_header, fmt_currency, fmt_currency_signed, currency_symbol, selected_market,
 )
+from dashboard.components.ticker_ribbon import render_ticker_ribbon
+from dashboard.components.notifications import check_and_notify
 from dashboard.components.kpi_card import render_kpi_card
 from dashboard.components.equity_curve import render_equity_curve
 from dashboard.components.monthly_stats import render_monthly_grid
@@ -28,7 +30,9 @@ st.markdown(f"<style>{(Path(__file__).parent.parent / 'style.css').read_text()}<
 
 render_sidebar("Dashboard")
 db = get_session()
+check_and_notify(db)
 render_header()
+render_ticker_ribbon()
 
 market = selected_market()
 starting_capital = STARTING_CAPITAL_USD if market == "US" else STARTING_CAPITAL_INR
@@ -305,34 +309,44 @@ STRATEGY_LABELS = {
     "MOM_CONT": ("Momentum continuation", "Next-day intraday"),
     "TREND_EMA": ("Trend following", "50/200 EMA cross"),
     "BB_MEANREV": ("Bollinger mean reversion", "Intraday"),
+    "DONCHIAN_BRK": ("Donchian breakout", "20-day Turtle channel"),
+    "SUPERTREND": ("Supertrend", "ATR trend-following"),
 }
-strat_cols = st.columns(len(STRATEGY_LABELS))
-for col, (strategy_id, (name, subtitle)) in zip(strat_cols, STRATEGY_LABELS.items()):
-    with col:
-        closed = db.query(Trade).filter(
-            Trade.market == market, Trade.strategy_id == strategy_id, Trade.net_pnl.isnot(None)
-        ).all()
-        wins = [t for t in closed if t.outcome == "WIN"]
-        win_rate = (len(wins) / len(closed) * 100) if closed else 0.0
-        today_strat_pnl = sum(t.net_pnl for t in closed if t.timestamp_exit and t.timestamp_exit.date() == today) if closed else 0.0
-        wr_class = "positive" if win_rate >= 55 else "negative" if closed else "neutral"
-        pnl_class = "positive" if today_strat_pnl >= 0 else "negative"
-        st.markdown(
-            f"""
-            <div class="glass-card" style="padding:14px 16px;">
-                <p style="font-size:13px;font-weight:600;margin:0 0 2px;">{name}</p>
-                <p style="font-size:11px;color:var(--text-muted);margin:0 0 13px;">{subtitle}</p>
-                <div style="display:flex;justify-content:space-between;">
-                    <div>
-                        <p class="kpi-label" style="margin:0 0 4px;">Win rate</p>
-                        <p class="kairos-mono {wr_class}" style="font-size:14px;font-weight:600;margin:0;">{win_rate:.1f}%</p>
-                    </div>
-                    <div style="text-align:right;">
-                        <p class="kpi-label" style="margin:0 0 4px;">Today P&amp;L</p>
-                        <p class="kairos-mono {pnl_class}" style="font-size:14px;font-weight:600;margin:0;">{fmt_currency_signed(today_strat_pnl)}</p>
+STRAT_ROW_SIZE = 4
+strat_items = list(STRATEGY_LABELS.items())
+for row_start in range(0, len(strat_items), STRAT_ROW_SIZE):
+    row_items = strat_items[row_start:row_start + STRAT_ROW_SIZE]
+    strat_cols = st.columns(STRAT_ROW_SIZE)
+    for col, (strategy_id, (name, subtitle)) in zip(strat_cols, row_items):
+        with col:
+            closed = db.query(Trade).filter(
+                Trade.market == market, Trade.strategy_id == strategy_id, Trade.net_pnl.isnot(None)
+            ).all()
+            wins = [t for t in closed if t.outcome == "WIN"]
+            win_rate = (len(wins) / len(closed) * 100) if closed else 0.0
+            today_strat_pnl = sum(t.net_pnl for t in closed if t.timestamp_exit and t.timestamp_exit.date() == today) if closed else 0.0
+            wr_class = "positive" if win_rate >= 55 else "negative" if closed else "neutral"
+            pnl_class = "positive" if today_strat_pnl >= 0 else "negative"
+            st.markdown(
+                f"""
+                <div class="glass-card" style="padding:14px 16px;">
+                    <p style="font-size:13px;font-weight:600;margin:0 0 2px;">{name}</p>
+                    <p style="font-size:11px;color:var(--text-muted);margin:0 0 13px;">{subtitle}</p>
+                    <div style="display:flex;justify-content:space-between;">
+                        <div>
+                            <p class="kpi-label" style="margin:0 0 4px;">Win rate</p>
+                            <p class="kairos-mono {wr_class}" style="font-size:14px;font-weight:600;margin:0;">{win_rate:.1f}%</p>
+                        </div>
+                        <div style="text-align:right;">
+                            <p class="kpi-label" style="margin:0 0 4px;">Today P&amp;L</p>
+                            <p class="kairos-mono {pnl_class}" style="font-size:14px;font-weight:600;margin:0;">{fmt_currency_signed(today_strat_pnl)}</p>
+                        </div>
                     </div>
                 </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+                """,
+                unsafe_allow_html=True,
+            )
+    if len(row_items) < STRAT_ROW_SIZE:
+        st.markdown("<div style='height:0px'></div>", unsafe_allow_html=True)
+    else:
+        st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)

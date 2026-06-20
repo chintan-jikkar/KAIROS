@@ -10,6 +10,7 @@ import streamlit as st
 from config.settings import EXECUTION_MODE, ACTIVE_MARKET
 from dashboard.components.sidebar import render_sidebar
 from dashboard.components.header import render_header
+from dashboard.components.ticker_ribbon import render_ticker_ribbon
 from engine.risk import RISK_PARAMS
 
 st.set_page_config(page_title="KAIROS · Settings", page_icon="⚡", layout="wide")
@@ -17,6 +18,7 @@ st.markdown(f"<style>{(Path(__file__).parent.parent / 'style.css').read_text()}<
 
 render_sidebar("Settings")
 render_header()
+render_ticker_ribbon()
 st.markdown('<h2 class="kairos-heading">Settings</h2>', unsafe_allow_html=True)
 
 with st.container(border=True, key="settings_market_config"):

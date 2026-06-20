@@ -11,6 +11,8 @@ import streamlit as st
 from dashboard.db import get_session
 from dashboard.components.sidebar import render_sidebar
 from dashboard.components.header import render_header
+from dashboard.components.ticker_ribbon import render_ticker_ribbon
+from dashboard.components.notifications import check_and_notify
 from dashboard.components.equity_curve import KAIROS_CHART_LAYOUT
 from database.models import Trade, PortfolioSnapshot
 
@@ -19,7 +21,9 @@ st.markdown(f"<style>{(Path(__file__).parent.parent / 'style.css').read_text()}<
 
 render_sidebar("Analysis")
 db = get_session()
+check_and_notify(db)
 render_header()
+render_ticker_ribbon()
 st.markdown('<h2 class="kairos-heading">Analysis</h2>', unsafe_allow_html=True)
 
 closed_trades = db.query(Trade).filter(Trade.net_pnl.isnot(None)).all()

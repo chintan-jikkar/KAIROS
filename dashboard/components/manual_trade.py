@@ -69,12 +69,19 @@ def render_manual_paper_trade_button(
     market: str = "INDIA",
     current_price: float | None = None,
     recommended_strategy: str | None = None,
+    key_context: str = "",
 ):
     """Drop-in button + form for a given symbol. Call from Markets or Strategies pages.
     recommended_strategy: the screener's assigned_strategy (Markets) or the strategy_id
     of the section this was opened from (Strategies) — pre-selects that strategy in the
-    form's picker, but the user can still try the symbol against a different one."""
-    key_prefix = f"manual_{symbol}_{market}"
+    form's picker, but the user can still try the symbol against a different one.
+    key_context: disambiguates the widget keys when the same symbol+market can render
+    under more than one call site on the same page — e.g. Strategies renders this once
+    per strategy section, and a symbol can legitimately appear under two different
+    strategies at once (one's DB-tagged trade history, another's live screener
+    assignment), which collided on a bare symbol+market key. Markets page only ever
+    renders one card per symbol, so it doesn't need to pass this."""
+    key_prefix = f"manual_{symbol}_{market}" + (f"_{key_context}" if key_context else "")
 
     if st.button("Try on paper", key=f"{key_prefix}_open", use_container_width=True):
         st.session_state[f"{key_prefix}_form_open"] = True

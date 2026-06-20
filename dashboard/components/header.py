@@ -52,8 +52,6 @@ def render_header():
     if "currency" not in st.session_state:
         st.session_state.currency = "INR"
 
-    _inject_header_scripts()
-
     left, right = st.columns([1.3, 5.7])
 
     with left:
@@ -65,13 +63,32 @@ def render_header():
             '</div>',
             unsafe_allow_html=True,
         )
+        previous_currency = st.session_state.currency
         selected = st.segmented_control(
             "Currency", ["INR", "USD"],
-            default=st.session_state.currency,
+            default=previous_currency,
             label_visibility="collapsed",
             key="currency_toggle",
         )
-        st.session_state.currency = selected or st.session_state.currency
+        new_currency = selected or previous_currency
+        just_switched = new_currency != previous_currency
+        st.session_state.currency = new_currency
+
+        if just_switched:
+            is_usd = new_currency == "USD"
+            glow_rgb = "0,212,255" if is_usd else "240,192,64"
+            label_fg = "var(--accent-cyan)" if is_usd else "var(--accent-gold)"
+            market_name = "US" if is_usd else "INDIA"
+            st.markdown(
+                f'<style>div[class*="st-key-currency_toggle"] {{'
+                f'animation: marketSwitchPulse 0.7s ease-out; --pulse-glow: rgba({glow_rgb},0.6); '
+                f'border-radius: 8px; }}</style>'
+                f'<span class="curr-val" style="display:inline-block;margin-top:4px;font-size:11px;'
+                f'font-weight:600;padding:3px 9px;border-radius:6px;'
+                f'background:rgba({glow_rgb},0.14);color:{label_fg};">'
+                f'⚡ Switched to {market_name} market</span>',
+                unsafe_allow_html=True,
+            )
 
         now = datetime.now().strftime("%H:%M:%S")  # JS clock takes over after first paint
         st.markdown(
@@ -101,6 +118,8 @@ def render_header():
             f'</div>',
             unsafe_allow_html=True,
         )
+
+    _inject_header_scripts()
 
 
 def fmt_currency(value: float, decimals: int = 2) -> str:

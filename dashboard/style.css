@@ -27,6 +27,17 @@
 [data-testid="stSidebarNav"] { display: none; }
 [data-testid="stSidebar"] [data-testid^="stBaseButton-header"] { display: none; }
 
+/* Native sidebar header shell (logo spacer + collapse-button wrapper) — the button
+   itself is already hidden above, but the empty wrapper still reserved ~60px plus a
+   flex gap before stSidebarUserContent. Nothing in it is used (no st.logo() call
+   anywhere in this app — KAIROS renders its own bolt icon below instead). */
+[data-testid="stSidebarHeader"] { display: none; }
+
+[data-testid="stSidebar"], [data-testid="stSidebar"] > div:first-child {
+    width: 52px !important;
+    min-width: 52px !important;
+}
+
 .stApp {
     background: var(--bg-primary);
     font-family: var(--font-body);
@@ -43,16 +54,51 @@
     padding-top: 0;
 }
 
+/* Hides Streamlit's own toolbar (Deploy button + ⋮ menu) entirely — "Deploy" is
+   confusingly close to KAIROS's own "deploy a strategy to the active universe"
+   concept, and the menu isn't part of the app's own UI. */
 [data-testid="stHeader"] {
-    background: transparent;
+    display: none;
 }
 
 /* Streamlit reserves a large default top/bottom gutter (96px/160px) meant for a
    plain st.title()-style layout — KAIROS's custom header replaces that, so the
    gutter just shows up as dead space above every page. */
 [data-testid="stMainBlockContainer"] {
-    padding-top: 24px;
-    padding-bottom: 48px;
+    padding-top: 64px;
+    padding-bottom: 24px;
+}
+
+/* Ticker ribbon — see dashboard/components/ticker_ribbon.py */
+.ticker-ribbon {
+    position: fixed;
+    top: 0;
+    left: 52px;
+    right: 0;
+    height: 36px;
+    background: #0a0a14;
+    border-bottom: 1px solid var(--border-glass);
+    overflow: hidden;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+}
+.ticker-track {
+    display: flex;
+    gap: 32px;
+    white-space: nowrap;
+    animation: ticker-scroll 40s linear infinite;
+    padding-left: 16px;
+}
+@keyframes ticker-scroll {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+}
+.ticker-item {
+    font-size: 12px;
+    display: inline-flex;
+    gap: 6px;
+    align-items: baseline;
 }
 
 .glass-card {
@@ -135,6 +181,15 @@ div[class*="st-key-settings_"] {
 .curr-val {
     display: inline-block;
     animation: currencyFlash 0.45s ease-out;
+}
+
+/* Market-switch toggle glow — fired once from header.py when INR/USD actually
+   changes (not on every rerun), color parameterized via --pulse-glow so the same
+   keyframe works for both the gold (India) and cyan (US) direction. */
+@keyframes marketSwitchPulse {
+    0%   { box-shadow: 0 0 0 0 var(--pulse-glow, rgba(240,192,64,0.6)); }
+    50%  { box-shadow: 0 0 0 10px var(--pulse-glow, rgba(240,192,64,0)); }
+    100% { box-shadow: 0 0 0 0 rgba(240,192,64,0); }
 }
 
 .badge-paper-prominent {
@@ -233,6 +288,20 @@ div[class*="st-key-settings_"] {
 .badge-short {
     background: rgba(168, 85, 247, 0.12);
     color: var(--accent-violet);
+}
+
+/* Direction-coloring (green/red) distinct from badge-long/short's cyan/violet
+   (those mark a *direction tag* like "LONG" in trade tables; this marks
+   whether a screener row's assigned strategy trades long or short — all 5
+   current strategies are long-only, so this is always green today, but the
+   logic is correct/ready rather than the row's badge being hardcoded). */
+.badge-direction-long {
+    background: rgba(0, 245, 160, 0.12);
+    color: var(--accent-emerald);
+}
+.badge-direction-short {
+    background: rgba(255, 59, 59, 0.12);
+    color: var(--accent-crimson);
 }
 
 .badge-paper {

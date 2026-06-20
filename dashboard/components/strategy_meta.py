@@ -13,4 +13,6 @@ STRATEGY_NAMES = {
     "MOM_CONT": "Momentum continuation",
     "TREND_EMA": "Trend following (50/200 EMA cross)",
     "BB_MEANREV": "Intraday Bollinger mean reversion",
+    "DONCHIAN_BRK": "Donchian/Turtle channel breakout",
+    "SUPERTREND": "Supertrend",
 }

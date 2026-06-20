@@ -1,4 +1,4 @@
-"""Page 4 — Strategies: status cards for the 5 active strategies + a creator form stub."""
+"""Page 4 — Strategies: status cards for the 7 active strategies + a creator form stub."""
 import json
 from datetime import date
 from pathlib import Path
@@ -11,6 +11,8 @@ import streamlit as st
 from dashboard.db import get_session
 from dashboard.components.sidebar import render_sidebar
 from dashboard.components.header import render_header
+from dashboard.components.ticker_ribbon import render_ticker_ribbon
+from dashboard.components.notifications import check_and_notify
 from dashboard.components.strategy_card import render_strategy_card
 from dashboard.components.manual_trade import render_manual_paper_trade_button
 from dashboard.components.market_quotes import fetch_quote
@@ -21,7 +23,9 @@ st.markdown(f"<style>{(Path(__file__).parent.parent / 'style.css').read_text()}<
 
 render_sidebar("Strategies")
 db = get_session()
+check_and_notify(db)
 render_header()
+render_ticker_ribbon()
 st.markdown('<h2 class="kairos-heading">Strategies</h2>', unsafe_allow_html=True)
 
 STRATEGY_LIBRARY = {
@@ -30,6 +34,8 @@ STRATEGY_LIBRARY = {
     "MOM_CONT": "Momentum continuation",
     "TREND_EMA": "Trend following (50/200 EMA cross)",
     "BB_MEANREV": "Intraday Bollinger mean reversion",
+    "DONCHIAN_BRK": "Donchian/Turtle channel breakout",
+    "SUPERTREND": "Supertrend",
 }
 INACTIVE_LIBRARY = [
     "Dual EMA crossover", "VWAP reclaim", "Gap and go",
@@ -88,6 +94,7 @@ with left_col:
                     pick, market="INDIA",
                     current_price=quote["price"] if quote else None,
                     recommended_strategy=strategy_id,
+                    key_context=strategy_id,
                 )
 
     st.markdown('<p style="color:var(--text-secondary);font-size:13px;margin:20px 0 8px;">Strategy library — inactive</p>', unsafe_allow_html=True)

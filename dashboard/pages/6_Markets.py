@@ -10,6 +10,8 @@ import streamlit as st
 
 from dashboard.components.sidebar import render_sidebar
 from dashboard.components.header import render_header
+from dashboard.components.ticker_ribbon import render_ticker_ribbon
+from dashboard.components.notifications import check_and_notify
 from dashboard.components.market_quotes import fetch_quote, logo_url
 from dashboard.components.market_hours import render_market_status_row
 from dashboard.components.manual_trade import render_manual_paper_trade_button
@@ -24,7 +26,9 @@ st.markdown(f"<style>{(Path(__file__).parent.parent / 'style.css').read_text()}<
 
 render_sidebar("Markets")
 db = get_session()
+check_and_notify(db)
 render_header()
+render_ticker_ribbon()
 
 st.markdown('<h2 class="kairos-heading">Markets</h2>', unsafe_allow_html=True)
 render_market_status_row(["INDIA", "US"])
@@ -37,26 +41,38 @@ st.markdown('<p style="color:var(--text-secondary);font-size:13px;margin:14px 0 
 
 watchlist = get_watchlist(db, market="INDIA")
 if watchlist:
-    wl_cols = st.columns(min(len(watchlist), 6))
-    for col, item in zip(wl_cols, watchlist):
-        with col:
-            q = fetch_quote(f"{item.symbol}.NS")
-            price_text = f"₹{q['price']:,.2f}" if q else "–"
-            chg_class = "positive" if (q and q["change_pct"] >= 0) else "negative" if q else "neutral"
-            chg_text = f"{q['change_pct']:+.2f}%" if q else ""
-            st.markdown(
-                f"""
-                <div class="glass-card" style="padding:11px 13px;">
-                    <p style="font-size:12px;font-weight:600;margin:0 0 6px;">{item.symbol}</p>
-                    <p class="kairos-mono" style="font-size:15px;margin:0 0 2px;">{price_text}</p>
-                    <p class="kairos-mono {chg_class}" style="font-size:11px;margin:0;">{chg_text}</p>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-            if st.button("Remove", key=f"rm_wl_{item.item_id}", use_container_width=True):
-                remove_from_watchlist(db, item.item_id)
-                st.rerun()
+    WATCHLIST_ROW_SIZE = 5
+    for row_start in range(0, len(watchlist), WATCHLIST_ROW_SIZE):
+        row_items = watchlist[row_start:row_start + WATCHLIST_ROW_SIZE]
+        wl_cols = st.columns(WATCHLIST_ROW_SIZE)
+        for col, item in zip(wl_cols, row_items):
+            with col:
+                q = fetch_quote(f"{item.symbol}.NS")
+                price_text = f"₹{q['price']:,.2f}" if q else "–"
+                chg_class = "positive" if (q and q["change_pct"] >= 0) else "negative" if q else "neutral"
+                chg_text = f"{q['change_pct']:+.2f}%" if q else ""
+                st.markdown(
+                    f"""
+                    <div class="glass-card" style="padding:11px 13px;">
+                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                            <img src="{logo_url(item.symbol + '.NS')}" loading="lazy"
+                                style="width:18px;height:18px;border-radius:4px;background:#fff;object-fit:contain;flex-shrink:0;"
+                                onerror="this.style.display='none'"/>
+                            <p style="font-size:12px;font-weight:600;margin:0;">{item.symbol}</p>
+                        </div>
+                        <p class="kairos-mono" style="font-size:15px;margin:0 0 2px;">{price_text}</p>
+                        <p class="kairos-mono {chg_class}" style="font-size:11px;margin:0;">{chg_text}</p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                if st.button("Remove", key=f"rm_wl_{item.item_id}", use_container_width=True):
+                    remove_from_watchlist(db, item.item_id)
+                    st.rerun()
+        # Fill any remaining slots in a short last row so cards don't stretch full-width
+        for empty_col in wl_cols[len(row_items):]:
+            with empty_col:
+                st.empty()
 else:
     st.caption("Nothing pinned yet — add symbols from the screener table below to keep them here always.")
 
@@ -73,12 +89,34 @@ st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 tab_india, tab_us, tab_fx = st.tabs(["India", "US", "FX"])
 
 
+STRATEGY_DIRECTION = {
+    "RSI2_OVN": "LONG", "ORB_BRK": "LONG", "MOM_CONT": "LONG",
+    "TREND_EMA": "LONG", "BB_MEANREV": "LONG",
+    "DONCHIAN_BRK": "LONG", "SUPERTREND": "LONG",
+}
+
 SCREENER_COLUMNS = [
-    ("", "28px"), ("Symbol", "1fr"), ("Price", "0.9fr"), ("ATR%", "0.7fr"),
+    ("", "28px"), ("Symbol", "1fr"), ("Price", "0.9fr"), ("Target", "0.9fr"), ("ATR%", "0.7fr"),
     ("Vol ratio", "0.8fr"), ("RSI14", "0.7fr"), ("Beta", "0.6fr"),
     ("Strategy", "1.1fr"), ("Score", "0.7fr"),
 ]
 SCREENER_GRID_TEMPLATE = " ".join(w for _, w in SCREENER_COLUMNS)
+
+
+def _target_text(row) -> str:
+    """Target only shows for rows with an actual live signal firing today —
+    'assigned strategy' means the regime fits, not that entry conditions are
+    met right now, so most rows legitimately won't have one."""
+    if not row.get("has_live_signal") or row.get("target_price") is None:
+        return "–"
+    return f"₹{row['target_price']:,.2f}"
+
+
+def _target_color_class(row) -> str:
+    if not row.get("has_live_signal"):
+        return "neutral"
+    direction = STRATEGY_DIRECTION.get(row["assigned_strategy"], "LONG")
+    return "positive" if direction == "LONG" else "negative"
 
 
 def render_screener_table(df: pd.DataFrame, active_symbols: set[str]) -> str | None:
@@ -113,11 +151,13 @@ def render_screener_table(df: pd.DataFrame, active_symbols: set[str]) -> str | N
                 f'onerror="this.style.display=\'none\'"/>'
                 f'<span class="kairos-mono" style="font-weight:600;">{symbol}</span></div>'
                 f'<div class="kairos-mono">₹{row["price"]:,.2f}</div>'
+                f'<div class="kairos-mono {_target_color_class(row)}">{_target_text(row)}</div>'
                 f'<div class="kairos-mono">{row["atr_pct"]:.2f}%</div>'
                 f'<div class="kairos-mono">{row["vol_ratio"]:.2f}x</div>'
                 f'<div class="kairos-mono">{row["rsi14"]:.1f}</div>'
                 f'<div class="kairos-mono">{row["beta"]:.2f}</div>'
-                f'<div><span class="badge badge-long">{row["assigned_strategy"]}</span></div>'
+                f'<div><span class="badge {"badge-direction-short" if STRATEGY_DIRECTION.get(row["assigned_strategy"]) == "SHORT" else "badge-direction-long"}">'
+                f'{row["assigned_strategy"]}</span></div>'
                 f'<div class="kairos-mono" style="font-weight:600;">{row["score"]:.0f}</div>'
                 f'</div>'
             )

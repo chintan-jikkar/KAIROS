@@ -12,6 +12,8 @@ from sqlalchemy import func
 from dashboard.db import get_session
 from dashboard.components.sidebar import render_sidebar
 from dashboard.components.header import render_header, fmt_currency_signed, currency_symbol, selected_market
+from dashboard.components.ticker_ribbon import render_ticker_ribbon
+from dashboard.components.notifications import check_and_notify
 from database.models import Trade, Signal
 from database.trade_log import get_open_trades
 
@@ -20,7 +22,9 @@ st.markdown(f"<style>{(Path(__file__).parent.parent / 'style.css').read_text()}<
 
 render_sidebar("Live trades")
 db = get_session()
+check_and_notify(db)
 render_header()
+render_ticker_ribbon()
 st.markdown('<h2 class="kairos-heading">Live trades</h2>', unsafe_allow_html=True)
 
 market = selected_market()
@@ -32,6 +36,8 @@ STRATEGY_NAMES = {
     "MOM_CONT": "Momentum continuation",
     "TREND_EMA": "Trend following (50/200 EMA cross)",
     "BB_MEANREV": "Intraday Bollinger mean reversion",
+    "DONCHIAN_BRK": "Donchian/Turtle channel breakout",
+    "SUPERTREND": "Supertrend",
 }
 
 left_col, right_col = st.columns([1, 1.6])

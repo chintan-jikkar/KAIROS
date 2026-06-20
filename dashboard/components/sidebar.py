@@ -12,9 +12,6 @@ NAV_ITEMS = [
     ("Settings", "ti-settings", "/Settings"),
 ]
 
-SIDEBAR_WIDTH_PX = 52
-
-
 def _inject_tooltip_script():
     """Custom tooltip for nav icons. Two reasons this can't be simpler:
     native title= doesn't reliably render for dynamically-routed SPA anchors,
@@ -63,18 +60,8 @@ def _inject_tooltip_script():
 
 
 def render_sidebar(active: str):
-    _inject_tooltip_script()
-    st.markdown(
-        f"""<style>
-        [data-testid="stSidebar"], [data-testid="stSidebar"] > div:first-child {{
-            width: {SIDEBAR_WIDTH_PX}px !important;
-            min-width: {SIDEBAR_WIDTH_PX}px !important;
-        }}
-        </style>""",
-        unsafe_allow_html=True,
-    )
-
     with st.sidebar:
+        _inject_tooltip_script()
         st.markdown(
             '<div style="padding:4px 0 12px;text-align:center;">'
             '<i class="ti ti-bolt" style="font-size:20px;color:#F0C040;'

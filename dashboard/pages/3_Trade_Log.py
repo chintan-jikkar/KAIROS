@@ -9,6 +9,8 @@ import streamlit as st
 from dashboard.db import get_session
 from dashboard.components.sidebar import render_sidebar
 from dashboard.components.header import render_header
+from dashboard.components.ticker_ribbon import render_ticker_ribbon
+from dashboard.components.notifications import check_and_notify
 from dashboard.components.trade_table import (
     trades_to_dataframe, render_trade_table, render_summary_bar, render_journal_detail,
 )
@@ -19,7 +21,9 @@ st.markdown(f"<style>{(Path(__file__).parent.parent / 'style.css').read_text()}<
 
 render_sidebar("Logbook")
 db = get_session()
+check_and_notify(db)
 render_header()
+render_ticker_ribbon()
 st.markdown('<h2 class="kairos-heading">Logbook</h2>', unsafe_allow_html=True)
 st.markdown(
     '<p style="font-size:12px;color:var(--text-secondary);margin:-6px 0 14px;">'
