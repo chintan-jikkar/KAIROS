@@ -37,3 +37,37 @@ def test_fetch_india_daily_still_defaults_to_period_when_no_window_given():
     assert kwargs["period"] == "3mo"
     assert kwargs.get("start") is None
     assert kwargs.get("end") is None
+
+
+def test_backtest_models_create_and_roundtrip(tmp_path):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from database.models import Base, BacktestRun, BacktestTrade
+
+    engine = create_engine(f"sqlite:///{tmp_path}/test.db")
+    Base.metadata.create_all(engine)
+    db = sessionmaker(bind=engine)()
+
+    run = BacktestRun(
+        symbol="RELIANCE", strategy_id="DONCHIAN_BRK", market="INDIA",
+        params_json="{}", start_date="2023-01-01", end_date="2023-06-01",
+        starting_capital=100000.0, ending_capital=105000.0, total_trades=1,
+    )
+    db.add(run)
+    db.commit()
+    db.refresh(run)
+
+    trade = BacktestTrade(
+        run_id=run.run_id, symbol="RELIANCE", strategy_id="DONCHIAN_BRK",
+        entry_date="2023-02-01", exit_date="2023-02-10",
+        entry_price=100.0, exit_price=110.0, quantity=10.0,
+        net_pnl=95.0, outcome="WIN", exit_reason="TRAILING_CHANNEL",
+    )
+    db.add(trade)
+    db.commit()
+
+    fetched_run = db.query(BacktestRun).filter(BacktestRun.run_id == run.run_id).first()
+    fetched_trades = db.query(BacktestTrade).filter(BacktestTrade.run_id == run.run_id).all()
+    assert fetched_run.symbol == "RELIANCE"
+    assert len(fetched_trades) == 1
+    assert fetched_trades[0].outcome == "WIN"

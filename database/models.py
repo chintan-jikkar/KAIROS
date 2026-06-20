@@ -164,3 +164,61 @@ class WatchlistItem(Base):
     note = Column(String, nullable=True)         # short reason it's pinned, e.g. "earnings Thu"
     added_at = Column(DateTime, default=datetime.utcnow)
     sort_order = Column(Integer, default=0)
+
+
+class BacktestRun(Base):
+    """One row per backtest run (or one per param combination within a sweep)."""
+    __tablename__ = "backtest_runs"
+
+    run_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    sweep_label = Column(String, nullable=True)   # groups runs from the same run_sweep() call
+
+    symbol = Column(String, nullable=False)
+    strategy_id = Column(String, nullable=False)
+    market = Column(String, default="INDIA")
+    params_json = Column(Text)            # json.dumps of the actual params used (after DEFAULT_PARAMS merge)
+    start_date = Column(String, nullable=False)   # "YYYY-MM-DD" as requested
+    end_date = Column(String, nullable=False)
+
+    starting_capital = Column(Float, nullable=False)
+    ending_capital = Column(Float)
+    total_trades = Column(Integer, default=0)
+    win_rate = Column(Float, nullable=True)
+    profit_factor = Column(Float, nullable=True)
+    sharpe_ratio = Column(Float, nullable=True)
+    max_drawdown_pct = Column(Float, nullable=True)
+    avg_rr_achieved = Column(Float, nullable=True)
+    total_net_pnl = Column(Float, nullable=True)
+    total_costs = Column(Float, nullable=True)
+
+
+class BacktestTrade(Base):
+    """One row per simulated trade, linked to its BacktestRun by run_id (plain string
+    column, no FK constraint — consistent with every other model in this file)."""
+    __tablename__ = "backtest_trades"
+
+    bt_trade_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    run_id = Column(String, nullable=False)
+
+    symbol = Column(String, nullable=False)
+    strategy_id = Column(String, nullable=False)
+    direction = Column(String, default="LONG")
+
+    entry_date = Column(String, nullable=False)   # ISO date/datetime string — these are simulated dates, not wall-clock
+    exit_date = Column(String, nullable=True)
+    entry_price = Column(Float)
+    exit_price = Column(Float, nullable=True)
+    stop_loss_price = Column(Float, nullable=True)
+    target_price = Column(Float, nullable=True)
+    quantity = Column(Float)
+
+    gross_pnl = Column(Float, nullable=True)
+    total_costs = Column(Float, default=0.0)
+    net_pnl = Column(Float, nullable=True)
+    net_pnl_pct = Column(Float, nullable=True)
+    actual_rr_achieved = Column(Float, nullable=True)
+
+    outcome = Column(String, nullable=True)        # WIN | LOSS | BREAKEVEN
+    exit_reason = Column(String, nullable=True)
+    signal_reason = Column(Text, nullable=True)
