@@ -47,6 +47,9 @@ logs/*.log
 # Isolated git worktrees for feature work
 .worktrees/
 
+# Brainstorming visual-companion session files
+.superpowers/
+
 # Testing
 .pytest_cache/
 .coverage
