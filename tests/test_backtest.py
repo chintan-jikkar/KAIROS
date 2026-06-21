@@ -71,3 +71,43 @@ def test_backtest_models_create_and_roundtrip(tmp_path):
     assert fetched_run.symbol == "RELIANCE"
     assert len(fetched_trades) == 1
     assert fetched_trades[0].outcome == "WIN"
+
+
+def test_metrics_hand_computed_fixture():
+    from engine.backtest_metrics import (
+        win_rate, profit_factor, max_drawdown, avg_rr_achieved, compute_all_metrics,
+    )
+
+    trades = [
+        {"net_pnl": 100.0, "actual_rr_achieved": 2.0},
+        {"net_pnl": -50.0, "actual_rr_achieved": -1.0},
+        {"net_pnl": 200.0, "actual_rr_achieved": 3.0},
+        {"net_pnl": -50.0, "actual_rr_achieved": -1.0},
+    ]
+    # win_rate: 2 wins / 4 closed = 0.5
+    assert win_rate(trades) == 0.5
+    # profit_factor: gross_profit=300, gross_loss=100 -> 3.0
+    assert profit_factor(trades) == 3.0
+    # avg_rr_achieved: (2 - 1 + 3 - 1) / 4 = 0.75
+    assert avg_rr_achieved(trades) == 0.75
+
+    equity_curve = [100000, 105000, 103000, 110000, 99000, 108000]
+    # peak before the dip is 110000, trough is 99000 -> (99000-110000)/110000
+    expected_dd = (99000 - 110000) / 110000
+    assert abs(max_drawdown(equity_curve) - expected_dd) < 1e-9
+
+    all_metrics = compute_all_metrics(trades, equity_curve)
+    assert all_metrics["total_trades"] == 4
+    assert all_metrics["win_rate"] == 0.5
+    assert all_metrics["total_net_pnl"] == 200.0
+
+
+def test_metrics_empty_inputs_dont_crash():
+    from engine.backtest_metrics import compute_all_metrics, win_rate, profit_factor, max_drawdown
+
+    assert win_rate([]) == 0.0
+    assert profit_factor([]) == 0.0
+    assert max_drawdown([]) == 0.0
+    metrics = compute_all_metrics([], [])
+    assert metrics["total_trades"] == 0
+    assert metrics["win_rate"] == 0.0
