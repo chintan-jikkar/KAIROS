@@ -305,3 +305,57 @@ def _persist_run(db, result: dict, params: dict | None) -> None:
             exit_reason=t["exit_reason"], signal_reason=t.get("signal_reason"),
         ))
     db.commit()
+
+
+def run_sweep(
+    symbol: str,
+    strategy_id: str,
+    start: str,
+    end: str,
+    param_grid: dict[str, list],
+    market: str = "INDIA",
+    segment: str = "equity_intraday",
+    starting_capital: float = 100_000.0,
+    db=None,
+) -> list[dict]:
+    """Cartesian product over param_grid, one run per combination, all tagged with a
+    shared sweep_label so results are easy to group/rank later."""
+    sweep_label = f"sweep-{symbol}-{strategy_id}-{uuid.uuid4().hex[:8]}"
+    keys = list(param_grid.keys())
+    results = []
+    for combo in itertools.product(*param_grid.values()):
+        params = dict(zip(keys, combo))
+        result = run_backtest(
+            symbol, strategy_id, start, end, params=params,
+            starting_capital=starting_capital, market=market, segment=segment,
+            db=db, sweep_label=sweep_label,
+        )
+        results.append(result)
+    return results
+
+
+def run_backtest_universe(
+    symbols: list[str],
+    strategy_id: str,
+    start: str,
+    end: str,
+    market: str = "INDIA",
+    segment: str = "equity_intraday",
+    starting_capital: float = 100_000.0,
+    db=None,
+) -> list[dict]:
+    """Loops one strategy across many symbols — no shared capital/position limits,
+    that's the explicitly-deferred portfolio layer (see plan doc decision #2).
+    Skips any symbol that fails to fetch rather than aborting the whole run."""
+    results = []
+    for symbol in symbols:
+        try:
+            result = run_backtest(
+                symbol, strategy_id, start, end, starting_capital=starting_capital,
+                market=market, segment=segment, db=db,
+            )
+            results.append(result)
+        except ValueError as exc:
+            logger.warning(f"Skipping {symbol}: {exc}")
+            continue
+    return results

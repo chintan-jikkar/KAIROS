@@ -386,3 +386,42 @@ def test_simulate_rsi2_ovn_eod_fills_at_open(monkeypatch):
     assert trade["exit_reason"] == "EOD"
     assert trade["exit_price"] == bar6_open
     assert trade["exit_price"] != float(df.iloc[6]["close"])  # explicitly NOT close
+
+
+def test_run_sweep_covers_cartesian_product_and_shares_label():
+    from engine import backtest
+
+    captured = []
+
+    def fake_run_backtest(symbol, strategy_id, start, end, **kwargs):
+        captured.append(kwargs)
+        return {"metrics": {"profit_factor": 1.0}, "trades": [], "equity_curve": []}
+
+    with patch.object(backtest, "run_backtest", side_effect=fake_run_backtest):
+        results = backtest.run_sweep(
+            "RELIANCE", "DONCHIAN_BRK", "2022-01-01", "2023-01-01",
+            param_grid={"entry_period": [10, 20], "atr_stop_multiplier": [1.5, 2.0]},
+        )
+
+    assert len(results) == 4  # 2 x 2 cartesian product
+    labels = {kw["sweep_label"] for kw in captured}
+    assert len(labels) == 1  # all 4 runs share one label
+    seen_params = [kw["params"] for kw in captured]
+    assert {"entry_period": 10, "atr_stop_multiplier": 1.5} in seen_params
+    assert {"entry_period": 20, "atr_stop_multiplier": 2.0} in seen_params
+
+
+def test_run_backtest_universe_skips_symbols_that_raise():
+    from engine import backtest
+
+    def fake_run_backtest(symbol, strategy_id, start, end, **kwargs):
+        if symbol == "BADSYMBOL":
+            raise ValueError("No data returned")
+        return {"metrics": {"profit_factor": 1.0}, "trades": [], "equity_curve": []}
+
+    with patch.object(backtest, "run_backtest", side_effect=fake_run_backtest):
+        results = backtest.run_backtest_universe(
+            ["RELIANCE", "BADSYMBOL", "TCS"], "DONCHIAN_BRK", "2022-01-01", "2023-01-01",
+        )
+
+    assert len(results) == 2  # BADSYMBOL skipped, the other 2 succeeded
