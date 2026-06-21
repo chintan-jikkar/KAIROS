@@ -123,4 +123,4 @@ def test_sharpe_ratio_handles_near_zero_variance_from_float_noise():
 
     equity_curve = [100.0 * (1.01 ** i) for i in range(10)]
     result = sharpe_ratio(equity_curve)
-    assert result == 0.0 or abs(result) < 1000
+    assert result == 0.0
