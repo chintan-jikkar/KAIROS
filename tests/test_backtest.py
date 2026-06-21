@@ -111,3 +111,16 @@ def test_metrics_empty_inputs_dont_crash():
     metrics = compute_all_metrics([], [])
     assert metrics["total_trades"] == 0
     assert metrics["win_rate"] == 0.0
+
+
+def test_sharpe_ratio_handles_near_zero_variance_from_float_noise():
+    """A clean, steadily-compounding equity curve has returns that are mathematically
+    identical (e.g. exactly 1% per bar) but differ at the 1e-16 level due to floating-
+    point accumulation in repeated multiplication — exact `variance == 0` checks miss
+    this, producing a division by a near-zero std_r and a meaningless astronomically
+    large Sharpe instead of the intended 0.0 sentinel."""
+    from engine.backtest_metrics import sharpe_ratio
+
+    equity_curve = [100.0 * (1.01 ** i) for i in range(10)]
+    result = sharpe_ratio(equity_curve)
+    assert result == 0.0 or abs(result) < 1000

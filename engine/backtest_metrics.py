@@ -37,7 +37,7 @@ def sharpe_ratio(equity_curve: list[float], periods_per_year: int = 252) -> floa
     mean_r = sum(returns) / len(returns)
     variance = sum((r - mean_r) ** 2 for r in returns) / (len(returns) - 1)
     std_r = math.sqrt(variance)
-    if std_r == 0:
+    if std_r < 1e-12:
         return 0.0
     return (mean_r / std_r) * math.sqrt(periods_per_year)
 
