@@ -425,3 +425,23 @@ def test_run_backtest_universe_skips_symbols_that_raise():
         )
 
     assert len(results) == 2  # BADSYMBOL skipped, the other 2 succeeded
+
+
+def test_run_backtest_universe_skips_symbols_on_non_value_error_too():
+    """The reviewer's own scenario: a transient yfinance/network failure (anything
+    that isn't a ValueError) must also be skipped, not just the two deliberate
+    ValueError cases run_backtest raises itself — this is the realistic failure
+    mode for a multi-symbol scan making many sequential network calls."""
+    from engine import backtest
+
+    def fake_run_backtest(symbol, strategy_id, start, end, **kwargs):
+        if symbol == "FLAKYSYMBOL":
+            raise ConnectionError("simulated network failure")
+        return {"metrics": {"profit_factor": 1.0}, "trades": [], "equity_curve": []}
+
+    with patch.object(backtest, "run_backtest", side_effect=fake_run_backtest):
+        results = backtest.run_backtest_universe(
+            ["RELIANCE", "FLAKYSYMBOL", "TCS"], "DONCHIAN_BRK", "2022-01-01", "2023-01-01",
+        )
+
+    assert len(results) == 2  # FLAKYSYMBOL skipped, the other 2 succeeded

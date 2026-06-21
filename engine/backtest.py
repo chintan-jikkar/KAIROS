@@ -355,7 +355,7 @@ def run_backtest_universe(
                 market=market, segment=segment, db=db,
             )
             results.append(result)
-        except ValueError as exc:
+        except Exception as exc:
             logger.warning(f"Skipping {symbol}: {exc}")
             continue
     return results
