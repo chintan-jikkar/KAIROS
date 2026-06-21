@@ -5,7 +5,6 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 import pandas as pd
-import plotly.graph_objects as go
 import streamlit as st
 
 from dashboard.components.sidebar import render_sidebar
@@ -16,13 +15,21 @@ from dashboard.components.market_quotes import fetch_quote, logo_url
 from dashboard.components.market_hours import render_market_status_row
 from dashboard.components.manual_trade import render_manual_paper_trade_button
 from dashboard.components.news_feed import render_news_list
-from dashboard.components.equity_curve import KAIROS_CHART_LAYOUT
+from dashboard.components.candlestick_chart import render_candlestick_chart
 from dashboard.db import get_session
 from database.watchlist import add_to_watchlist, remove_from_watchlist, get_watchlist
-from data.market_data import fetch_india_daily
 
 st.set_page_config(page_title="KAIROS · Markets", page_icon="⚡", layout="wide")
 st.markdown(f"<style>{(Path(__file__).parent.parent / 'style.css').read_text()}</style>", unsafe_allow_html=True)
+
+
+@st.dialog("Chart")
+def _render_fullscreen_chart_dialog(symbol: str, db):
+    render_candlestick_chart(symbol, db, market="INDIA", key_prefix="full", height=560)
+    if st.button("Close"):
+        st.session_state["_fullscreen_chart_symbol"] = None
+        st.rerun()
+
 
 render_sidebar("Markets")
 db = get_session()
@@ -305,18 +312,19 @@ with tab_india:
             )
 
         with dd2:
-            price_df = fetch_india_daily(sel["symbol"], period="3mo")
-            if not price_df.empty:
-                fig = go.Figure(go.Scatter(
-                    x=price_df.index, y=price_df["close"], mode="lines",
-                    line=dict(color="#F0C040", width=2), fill="tozeroy",
-                    fillcolor="rgba(240,192,64,0.1)",
-                ))
-                fig.update_layout(**KAIROS_CHART_LAYOUT, height=180)
-                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+            chart_title_col, chart_fs_col = st.columns([6, 1])
+            with chart_title_col:
+                st.markdown('<p class="kpi-label" style="margin:4px 0;">Chart</p>', unsafe_allow_html=True)
+            with chart_fs_col:
+                if st.button("⛶", key=f"chart_fs_{sel['symbol']}", help="Open fullscreen chart"):
+                    st.session_state["_fullscreen_chart_symbol"] = sel["symbol"]
+            render_candlestick_chart(sel["symbol"], db, market="INDIA", key_prefix="dd", height=260)
 
             st.markdown('<p style="font-size:12px;color:var(--text-secondary);margin:4px 0 8px;">Recent headlines</p>', unsafe_allow_html=True)
             render_news_list(f"{sel['symbol']}.NS", limit=4)
+
+        if st.session_state.get("_fullscreen_chart_symbol") == sel["symbol"]:
+            _render_fullscreen_chart_dialog(sel["symbol"], db)
 
         st.markdown('</div>', unsafe_allow_html=True)
 
