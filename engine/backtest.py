@@ -384,10 +384,14 @@ def _cli() -> None:
     Base.metadata.create_all(engine)
     db = sessionmaker(bind=engine)()
 
-    result = run_backtest(
-        args.symbol, args.strategy, args.start, args.end,
-        starting_capital=args.capital, market=args.market, segment=args.segment, db=db,
-    )
+    try:
+        result = run_backtest(
+            args.symbol, args.strategy, args.start, args.end,
+            starting_capital=args.capital, market=args.market, segment=args.segment, db=db,
+        )
+    except Exception as exc:
+        print(f"Error: {exc}")
+        raise SystemExit(1)
 
     print(f"\n{args.symbol} / {args.strategy}  [{args.start} .. {args.end}]")
     print(f"Starting capital: {result['starting_capital']:,.2f}")

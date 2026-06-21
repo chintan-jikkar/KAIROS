@@ -477,3 +477,32 @@ def test_cli_parses_args_and_invokes_run_backtest(monkeypatch, tmp_path):
     assert captured["start"] == "2022-01-01"
     assert captured["kwargs"]["starting_capital"] == 100000.0
     assert captured["kwargs"]["market"] == "INDIA"
+
+
+def test_cli_prints_clean_error_on_failure_instead_of_raw_traceback(monkeypatch, tmp_path, capsys):
+    """A malformed date or any other run_backtest failure should print one clean
+    line and exit(1), not dump a multi-frame traceback on a user running this from
+    a terminal — this matters because Task 7 runs this exact CLI for real."""
+    from engine import backtest
+    import config.settings as settings
+
+    monkeypatch.setattr(settings, "DB_PATH", str(tmp_path / "test.db"))
+
+    def fake_run_backtest(symbol, strategy_id, start, end, **kwargs):
+        raise ValueError("No data returned for RELIANCE between 2023-01-01 and 2022-01-01")
+
+    monkeypatch.setattr(backtest, "run_backtest", fake_run_backtest)
+    monkeypatch.setattr(
+        "sys.argv",
+        ["backtest.py", "--symbol", "RELIANCE", "--strategy", "DONCHIAN_BRK",
+         "--start", "2023-01-01", "--end", "2022-01-01"],
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        backtest._cli()
+
+    assert exc_info.value.code == 1
+    captured = capsys.readouterr()
+    assert "Error:" in captured.out
+    assert "No data returned" in captured.out
+    assert "Traceback" not in captured.out
