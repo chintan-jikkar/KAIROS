@@ -506,3 +506,54 @@ def test_cli_prints_clean_error_on_failure_instead_of_raw_traceback(monkeypatch,
     assert "Error:" in captured.out
     assert "No data returned" in captured.out
     assert "Traceback" not in captured.out
+
+
+def test_persist_run_writes_run_and_trades_with_correct_linkage(tmp_path):
+    """Integration-level test for _persist_run itself, against a real SQLAlchemy
+    session — the exact gap that let a real bug ship past every other test (they
+    either test the models directly with a manual commit+refresh before reading
+    run.run_id, which masks the issue, or mock run_backtest/_simulate_trades
+    entirely, bypassing _persist_run altogether). Without db.flush() after db.add(run),
+    BacktestRun.run_id is still None (SQLAlchemy only fires the UUID default at
+    flush/insert time) when each BacktestTrade is constructed, causing every real
+    run with db= passed in to fail with a NOT NULL constraint violation."""
+    from datetime import datetime
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from database.models import Base, BacktestRun, BacktestTrade
+    from engine.backtest import _persist_run
+
+    engine = create_engine(f"sqlite:///{tmp_path}/test.db")
+    Base.metadata.create_all(engine)
+    db = sessionmaker(bind=engine)()
+
+    result = {
+        "symbol": "RELIANCE", "strategy_id": "DONCHIAN_BRK", "market": "INDIA",
+        "start": "2023-01-01", "end": "2024-01-01",
+        "starting_capital": 100000.0, "ending_capital": 102456.93,
+        "sweep_label": None,
+        "metrics": {
+            "total_trades": 1, "win_rate": 1.0, "profit_factor": float("inf"),
+            "sharpe_ratio": 1.2, "max_drawdown_pct": -0.05, "avg_rr_achieved": 2.0,
+            "total_net_pnl": 2456.93, "total_costs": 12.07,
+        },
+        "trades": [{
+            "symbol": "RELIANCE", "strategy_id": "DONCHIAN_BRK",
+            "entry_date": datetime(2023, 3, 1), "exit_date": datetime(2023, 3, 15),
+            "entry_price": 1109.20, "exit_price": 1219.47,
+            "stop_loss_price": 1050.0, "target_price": 1250.0, "quantity": 22.54,
+            "gross_pnl": 2469.0, "total_costs": 12.07, "net_pnl": 2456.93,
+            "net_pnl_pct": 0.0988, "actual_rr_achieved": 1.86,
+            "outcome": "WIN", "exit_reason": "TRAILING_CHANNEL", "signal_reason": "test signal",
+        }],
+    }
+
+    _persist_run(db, result, params={"entry_period": 20})
+
+    saved_run = db.query(BacktestRun).filter(BacktestRun.symbol == "RELIANCE").first()
+    assert saved_run is not None
+    assert saved_run.run_id is not None
+    saved_trades = db.query(BacktestTrade).filter(BacktestTrade.run_id == saved_run.run_id).all()
+    assert len(saved_trades) == 1
+    assert saved_trades[0].net_pnl == 2456.93
+    assert saved_trades[0].entry_date == datetime(2023, 3, 1).isoformat()

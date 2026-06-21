@@ -293,6 +293,7 @@ def _persist_run(db, result: dict, params: dict | None) -> None:
         total_costs=metrics["total_costs"],
     )
     db.add(run)
+    db.flush()
     for t in result["trades"]:
         db.add(BacktestTrade(
             run_id=run.run_id, symbol=t["symbol"], strategy_id=t["strategy_id"],
