@@ -445,3 +445,35 @@ def test_run_backtest_universe_skips_symbols_on_non_value_error_too():
         )
 
     assert len(results) == 2  # FLAKYSYMBOL skipped, the other 2 succeeded
+
+
+def test_cli_parses_args_and_invokes_run_backtest(monkeypatch, tmp_path):
+    from engine import backtest
+    import config.settings as settings
+
+    monkeypatch.setattr(settings, "DB_PATH", str(tmp_path / "test.db"))
+
+    captured = {}
+
+    def fake_run_backtest(symbol, strategy_id, start, end, **kwargs):
+        captured["symbol"] = symbol
+        captured["strategy_id"] = strategy_id
+        captured["start"] = start
+        captured["end"] = end
+        captured["kwargs"] = kwargs
+        return {"starting_capital": 100000.0, "ending_capital": 105000.0,
+                "metrics": {"total_trades": 0, "win_rate": 0.0}}
+
+    monkeypatch.setattr(backtest, "run_backtest", fake_run_backtest)
+    monkeypatch.setattr(
+        "sys.argv",
+        ["backtest.py", "--symbol", "RELIANCE", "--strategy", "DONCHIAN_BRK",
+         "--start", "2022-01-01", "--end", "2023-01-01"],
+    )
+    backtest._cli()
+
+    assert captured["symbol"] == "RELIANCE"
+    assert captured["strategy_id"] == "DONCHIAN_BRK"
+    assert captured["start"] == "2022-01-01"
+    assert captured["kwargs"]["starting_capital"] == 100000.0
+    assert captured["kwargs"]["market"] == "INDIA"

@@ -359,3 +359,42 @@ def run_backtest_universe(
             logger.warning(f"Skipping {symbol}: {exc}")
             continue
     return results
+
+
+def _cli() -> None:
+    import argparse
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from config.settings import DB_PATH
+    from database.models import Base
+
+    parser = argparse.ArgumentParser(description="Run a KAIROS strategy backtest.")
+    parser.add_argument("--symbol", required=True)
+    parser.add_argument("--strategy", required=True, choices=sorted(SUPPORTED_STRATEGIES))
+    parser.add_argument("--start", required=True, help="YYYY-MM-DD")
+    parser.add_argument("--end", required=True, help="YYYY-MM-DD")
+    parser.add_argument("--capital", type=float, default=100_000.0)
+    parser.add_argument("--market", default="INDIA")
+    parser.add_argument("--segment", default="equity_intraday")
+    args = parser.parse_args()
+
+    engine = create_engine(f"sqlite:///{DB_PATH}", connect_args={"check_same_thread": False})
+    Base.metadata.create_all(engine)
+    db = sessionmaker(bind=engine)()
+
+    result = run_backtest(
+        args.symbol, args.strategy, args.start, args.end,
+        starting_capital=args.capital, market=args.market, segment=args.segment, db=db,
+    )
+
+    print(f"\n{args.symbol} / {args.strategy}  [{args.start} .. {args.end}]")
+    print(f"Starting capital: {result['starting_capital']:,.2f}")
+    print(f"Ending capital:   {result['ending_capital']:,.2f}")
+    for key, value in result["metrics"].items():
+        print(f"  {key}: {value}")
+
+
+if __name__ == "__main__":
+    _cli()
