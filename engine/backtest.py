@@ -347,7 +347,9 @@ def run_backtest_universe(
 ) -> list[dict]:
     """Loops one strategy across many symbols — no shared capital/position limits,
     that's the explicitly-deferred portfolio layer (see plan doc decision #2).
-    Skips any symbol that fails to fetch rather than aborting the whole run."""
+    Catches any exception per-symbol (not just data-fetch failures — a transient
+    yfinance/network error is the realistic case, but this is deliberately broad)
+    and logs + skips rather than aborting the whole run."""
     results = []
     for symbol in symbols:
         try:
