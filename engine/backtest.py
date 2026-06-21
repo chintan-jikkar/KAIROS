@@ -36,6 +36,10 @@ NEXT_OPEN_ENTRY_STRATEGIES = {"MOM_CONT"}
 
 # (strategy_id, exit_reason) pairs that fill at the CURRENT bar's OPEN rather than close.
 # See "Key design decisions" #1 in the plan doc — only RSI2_OVN's "EOD" (next_open) reason.
+# NOTE for future strategies: this is a hand-maintained set, not derived from each
+# strategy's own exit_timing param — if a new strategy declares exit_timing="next_open"
+# (or any other non-"close" value) for some exit reason, it must be added here explicitly,
+# or that exit will silently fill at close instead of open. No runtime check enforces this.
 OPEN_FILL_EXIT_REASONS = {("RSI2_OVN", "EOD")}
 
 

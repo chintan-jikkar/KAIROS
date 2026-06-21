@@ -271,3 +271,118 @@ def test_simulate_rejects_intraday_strategies_even_though_they_exist_in_registry
     df = _add_indicators(_build_synthetic_ohlcv(60))
     with pytest.raises(ValueError):
         _simulate_trades(df, "TESTSYM", "ORB_BRK", "2023-01-01", "2023-03-01")
+
+
+def test_simulate_mom_cont_same_day_roundtrip(monkeypatch):
+    """Engine-orchestration test for MOM_CONT's two-step entry, using a stubbed
+    strategy class injected into STRATEGY_REGISTRY — isolates the *engine's*
+    same-day round-trip handling from the *real* strategy's signal-generation
+    conditions (which are fiddly to trigger from a synthetic fixture). Confirms
+    a MOM_CONT position can never survive past the bar it was confirmed on."""
+    import engine.backtest as backtest_module
+    from strategies.base import BaseStrategy
+
+    class StubMomCont(BaseStrategy):
+        strategy_id = "MOM_CONT"
+        name = "Stub MOM_CONT"
+
+        def __init__(self, params=None, market="INDIA"):
+            super().__init__({"exit_timing": "eod"}, market)
+
+        def generate_signal(self, symbol, df):
+            if len(df) - 1 == 5:  # flag on bar index 5 only
+                return {
+                    "action": "BUY", "symbol": symbol, "strategy_id": "MOM_CONT",
+                    "strategy_name": "Stub MOM_CONT", "entry_price": 999.0,
+                    "stop_price": 900.0, "target_price": 1100.0,
+                    "planned_rr_ratio": 2.0, "signal_reason": "stub flag",
+                    "deferred": True, "indicators": {},
+                }
+            return None
+
+        def check_gap_and_confirm(self, signal, open_price):
+            return {
+                **signal, "entry_price": open_price,
+                "stop_price": open_price * 0.98, "target_price": open_price * 1.05,
+                "deferred": False,
+            }
+
+        def should_exit(self, trade, current_bar):
+            if current_bar.get("is_eod"):
+                return True, "EOD"
+            return False, ""
+
+    rows = [{"open": 100.0 + i, "high": 106.0 + i, "low": 99.0 + i, "close": 105.0 + i, "volume": 100000.0}
+            for i in range(10)]
+    dates = pd.bdate_range("2023-01-02", periods=10)
+    df = pd.DataFrame(rows, index=dates)
+    df.index.name = "Date"
+    df["symbol"] = "TESTSYM"
+
+    monkeypatch.setitem(backtest_module.STRATEGY_REGISTRY, "MOM_CONT", StubMomCont)
+    result = backtest_module._simulate_trades(
+        df, "TESTSYM", "MOM_CONT", dates[0].strftime("%Y-%m-%d"), dates[9].strftime("%Y-%m-%d"),
+        params=None, starting_capital=100000.0, market="INDIA", segment="equity_intraday",
+    )
+
+    assert len(result["trades"]) == 1
+    trade = result["trades"][0]
+    # signal flagged on bar 5 -> confirmed at bar 6's open -> must exit same bar (bar 6's close)
+    bar6_open = float(df.iloc[6]["open"])
+    bar6_close = float(df.iloc[6]["close"])
+    assert trade["entry_price"] == bar6_open
+    assert trade["exit_price"] == bar6_close
+    assert trade["exit_reason"] == "EOD"
+    assert trade["entry_date"] == trade["exit_date"]  # same bar -> zero hold time
+
+
+def test_simulate_rsi2_ovn_eod_fills_at_open(monkeypatch):
+    """Engine-orchestration test for RSI2_OVN's exit_timing='next_open' contract —
+    confirms that when should_exit returns the 'EOD' reason, the fill happens at
+    that bar's OPEN (per OPEN_FILL_EXIT_REASONS), not its close, unlike every other
+    exit reason for every other strategy in this engine."""
+    import engine.backtest as backtest_module
+    from strategies.base import BaseStrategy
+
+    class StubRSI2Ovn(BaseStrategy):
+        strategy_id = "RSI2_OVN"
+        name = "Stub RSI2_OVN"
+
+        def __init__(self, params=None, market="INDIA"):
+            super().__init__({"exit_timing": "next_open"}, market)
+
+        def generate_signal(self, symbol, df):
+            if len(df) - 1 == 5:
+                return {
+                    "action": "BUY", "symbol": symbol, "strategy_id": "RSI2_OVN",
+                    "strategy_name": "Stub RSI2_OVN", "entry_price": float(df.iloc[-1]["close"]),
+                    "stop_price": float(df.iloc[-1]["close"]) * 0.96,
+                    "target_price": float(df.iloc[-1]["close"]) * 1.08,
+                    "planned_rr_ratio": 2.0, "signal_reason": "stub signal", "indicators": {},
+                }
+            return None
+
+        def should_exit(self, trade, current_bar):
+            return True, "EOD"
+
+    rows = [{"open": 100.0 + i, "high": 106.0 + i, "low": 99.0 + i, "close": 105.0 + i, "volume": 100000.0}
+            for i in range(10)]
+    dates = pd.bdate_range("2023-01-02", periods=10)
+    df = pd.DataFrame(rows, index=dates)
+    df.index.name = "Date"
+    df["symbol"] = "TESTSYM"
+
+    monkeypatch.setitem(backtest_module.STRATEGY_REGISTRY, "RSI2_OVN", StubRSI2Ovn)
+    result = backtest_module._simulate_trades(
+        df, "TESTSYM", "RSI2_OVN", dates[0].strftime("%Y-%m-%d"), dates[9].strftime("%Y-%m-%d"),
+        params=None, starting_capital=100000.0, market="INDIA", segment="equity_intraday",
+    )
+
+    assert len(result["trades"]) == 1
+    trade = result["trades"][0]
+    bar5_close = float(df.iloc[5]["close"])  # entry fills at signal bar's close
+    bar6_open = float(df.iloc[6]["open"])    # exit fills at the NEXT bar's OPEN, not close
+    assert trade["entry_price"] == bar5_close
+    assert trade["exit_reason"] == "EOD"
+    assert trade["exit_price"] == bar6_open
+    assert trade["exit_price"] != float(df.iloc[6]["close"])  # explicitly NOT close
