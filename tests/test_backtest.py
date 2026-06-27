@@ -126,6 +126,40 @@ def test_sharpe_ratio_handles_near_zero_variance_from_float_noise():
     assert result == 0.0
 
 
+def test_historical_var_and_conditional_var_hand_computed_fixture():
+    from engine.backtest_metrics import historical_var, conditional_var
+
+    # 100 evenly-spaced returns from -0.050 to +0.049, already sorted ascending —
+    # easy to hand-verify both the 95% (worst 5) and 99% (worst 1) tail cutoffs.
+    returns = [-0.050 + i * 0.001 for i in range(100)]
+    equity_curve = [100_000.0]
+    for r in returns:
+        equity_curve.append(equity_curve[-1] * (1 + r))
+
+    # 95%: ceil(100*0.05)=5 -> index 4 -> returns_sorted[4] = -0.046
+    assert historical_var(equity_curve, confidence=0.95) == pytest.approx(-0.046, abs=1e-9)
+    # 99%: ceil(100*0.01)=1 -> index 0 -> returns_sorted[0] = -0.050
+    assert historical_var(equity_curve, confidence=0.99) == pytest.approx(-0.050, abs=1e-9)
+    # CVaR 95%: mean of the worst 5 = mean(-0.050..-0.046) = -0.048
+    assert conditional_var(equity_curve, confidence=0.95) == pytest.approx(-0.048, abs=1e-9)
+    # CVaR 99%: mean of the worst 1 = -0.050
+    assert conditional_var(equity_curve, confidence=0.99) == pytest.approx(-0.050, abs=1e-9)
+    # Sign convention matches max_drawdown's: negative fraction, not flipped-positive.
+    assert historical_var(equity_curve, confidence=0.95) < 0
+
+
+def test_historical_var_and_conditional_var_require_minimum_sample_size():
+    from engine.backtest_metrics import historical_var, conditional_var, MIN_VAR_SAMPLE_SIZE
+
+    below_floor = [100_000.0 + i * 100 for i in range(MIN_VAR_SAMPLE_SIZE)]  # 19 returns, one short
+    assert historical_var(below_floor) is None
+    assert conditional_var(below_floor) is None
+
+    at_floor = [100_000.0 + i * 100 for i in range(MIN_VAR_SAMPLE_SIZE + 1)]  # exactly 20 returns
+    assert historical_var(at_floor) is not None
+    assert conditional_var(at_floor) is not None
+
+
 def _build_synthetic_ohlcv(n_bars: int = 60, overrides: dict | None = None) -> pd.DataFrame:
     """Deterministic OHLCV fixture: 40 flat consolidation bars (close=100), a clean
     breakout on bar 40 (close=110, comfortably above the 20-bar high), 3 bars holding

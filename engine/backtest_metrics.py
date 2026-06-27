@@ -55,6 +55,44 @@ def max_drawdown(equity_curve: list[float]) -> float:
     return max_dd
 
 
+MIN_VAR_SAMPLE_SIZE = 20  # below this, a percentile-based tail estimate is too noisy to trust
+
+
+def historical_var(equity_curve: list[float], confidence: float = 0.95) -> float | None:
+    """Historical-simulation VaR: the (1-confidence) percentile of daily returns,
+    as a negative fraction (e.g. -0.032 = "expect to lose ~3.2%"), matching
+    max_drawdown's sign convention. Returns None (not 0.0) below
+    MIN_VAR_SAMPLE_SIZE observations — a fabricated 0.0 would read as "zero risk."
+    """
+    returns = [
+        (equity_curve[i] - equity_curve[i - 1]) / equity_curve[i - 1]
+        for i in range(1, len(equity_curve))
+        if equity_curve[i - 1] != 0
+    ]
+    if len(returns) < MIN_VAR_SAMPLE_SIZE:
+        return None
+    returns.sort()
+    index = max(0, math.ceil(len(returns) * (1 - confidence) - 1e-9) - 1)
+    return returns[index]
+
+
+def conditional_var(equity_curve: list[float], confidence: float = 0.95) -> float | None:
+    """Conditional VaR / Expected Shortfall: mean of all returns at or below the
+    historical_var cutoff. Same sign convention and minimum-sample-size rule as
+    historical_var."""
+    returns = [
+        (equity_curve[i] - equity_curve[i - 1]) / equity_curve[i - 1]
+        for i in range(1, len(equity_curve))
+        if equity_curve[i - 1] != 0
+    ]
+    if len(returns) < MIN_VAR_SAMPLE_SIZE:
+        return None
+    returns.sort()
+    index = max(0, math.ceil(len(returns) * (1 - confidence) - 1e-9) - 1)
+    tail = returns[: index + 1]
+    return sum(tail) / len(tail)
+
+
 def avg_rr_achieved(trades: list[dict]) -> float:
     rrs = [t["actual_rr_achieved"] for t in trades if t.get("actual_rr_achieved") is not None]
     return sum(rrs) / len(rrs) if rrs else 0.0
