@@ -109,4 +109,8 @@ def compute_all_metrics(trades: list[dict], equity_curve: list[float]) -> dict:
         "avg_rr_achieved": avg_rr_achieved(closed),
         "total_net_pnl": sum(t["net_pnl"] for t in closed) if closed else 0.0,
         "total_costs": sum(t.get("total_costs", 0) or 0 for t in closed),
+        "var_95": historical_var(equity_curve, confidence=0.95),
+        "var_99": historical_var(equity_curve, confidence=0.99),
+        "cvar_95": conditional_var(equity_curve, confidence=0.95),
+        "cvar_99": conditional_var(equity_curve, confidence=0.99),
     }

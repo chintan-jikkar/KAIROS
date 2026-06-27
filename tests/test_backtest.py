@@ -100,6 +100,9 @@ def test_metrics_hand_computed_fixture():
     assert all_metrics["total_trades"] == 4
     assert all_metrics["win_rate"] == 0.5
     assert all_metrics["total_net_pnl"] == 200.0
+    # Only 5 returns in this fixture — below MIN_VAR_SAMPLE_SIZE (20), so None.
+    assert all_metrics["var_95"] is None
+    assert all_metrics["cvar_99"] is None
 
 
 def test_metrics_empty_inputs_dont_crash():
@@ -111,6 +114,22 @@ def test_metrics_empty_inputs_dont_crash():
     metrics = compute_all_metrics([], [])
     assert metrics["total_trades"] == 0
     assert metrics["win_rate"] == 0.0
+    assert metrics["var_95"] is None
+    assert metrics["cvar_99"] is None
+
+
+def test_compute_all_metrics_includes_var_and_cvar_for_long_equity_curve():
+    from engine.backtest_metrics import compute_all_metrics, historical_var, conditional_var
+
+    equity_curve = [100_000.0]
+    for i in range(100):
+        equity_curve.append(equity_curve[-1] * (1 + (-0.050 + i * 0.001)))
+
+    all_metrics = compute_all_metrics([], equity_curve)
+    assert all_metrics["var_95"] == historical_var(equity_curve, confidence=0.95)
+    assert all_metrics["var_99"] == historical_var(equity_curve, confidence=0.99)
+    assert all_metrics["cvar_95"] == conditional_var(equity_curve, confidence=0.95)
+    assert all_metrics["cvar_99"] == conditional_var(equity_curve, confidence=0.99)
 
 
 def test_sharpe_ratio_handles_near_zero_variance_from_float_noise():
