@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import itertools
 import json
+import math
 import uuid
 
 import pandas as pd
@@ -405,6 +406,14 @@ def _cli() -> None:
     print(f"Ending capital:   {result['ending_capital']:,.2f}")
     for key, value in result["metrics"].items():
         print(f"  {key}: {value}")
+
+    print("\n10-day VaR/CVaR (1-day x sqrt(10), standard scaling approximation):")
+    for label, key in [("VaR 95%", "var_95"), ("VaR 99%", "var_99"),
+                        ("CVaR 95%", "cvar_95"), ("CVaR 99%", "cvar_99")]:
+        one_day = result["metrics"].get(key)
+        ten_day = one_day * math.sqrt(10) if one_day is not None else None
+        formatted = f"{ten_day:.2%}" if ten_day is not None else "not enough data"
+        print(f"  {label} (10-day): {formatted}")
 
 
 if __name__ == "__main__":

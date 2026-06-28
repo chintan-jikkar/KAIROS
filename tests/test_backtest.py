@@ -535,6 +535,63 @@ def test_cli_parses_args_and_invokes_run_backtest(monkeypatch, tmp_path):
     assert captured["kwargs"]["market"] == "INDIA"
 
 
+def test_cli_prints_10day_var_cvar_lines(monkeypatch, tmp_path, capsys):
+    from engine import backtest
+    import config.settings as settings
+
+    monkeypatch.setattr(settings, "DB_PATH", str(tmp_path / "test.db"))
+
+    def fake_run_backtest(symbol, strategy_id, start, end, **kwargs):
+        return {
+            "starting_capital": 100000.0, "ending_capital": 105000.0,
+            "metrics": {
+                "total_trades": 2, "win_rate": 1.0, "profit_factor": float("inf"),
+                "sharpe_ratio": 1.2, "max_drawdown_pct": -0.02, "avg_rr_achieved": 2.0,
+                "total_net_pnl": 5000.0, "total_costs": 20.0,
+                "var_95": -0.02, "var_99": -0.04, "cvar_95": -0.03, "cvar_99": -0.045,
+            },
+        }
+
+    monkeypatch.setattr(backtest, "run_backtest", fake_run_backtest)
+    monkeypatch.setattr(
+        "sys.argv",
+        ["backtest.py", "--symbol", "RELIANCE", "--strategy", "DONCHIAN_BRK",
+         "--start", "2022-01-01", "--end", "2023-01-01"],
+    )
+    backtest._cli()
+
+    captured = capsys.readouterr()
+    assert "VaR 95% (10-day): -6.32%" in captured.out
+    assert "VaR 99% (10-day): -12.65%" in captured.out
+    assert "CVaR 95% (10-day): -9.49%" in captured.out
+    assert "CVaR 99% (10-day): -14.23%" in captured.out
+
+
+def test_cli_shows_not_enough_data_when_var_keys_missing(monkeypatch, tmp_path, capsys):
+    """fake_run_backtest in test_cli_parses_args_and_invokes_run_backtest returns a
+    metrics dict without var_95/etc — the CLI must not crash on that, since it's
+    exactly what happens for real on a short backtest below MIN_VAR_SAMPLE_SIZE."""
+    from engine import backtest
+    import config.settings as settings
+
+    monkeypatch.setattr(settings, "DB_PATH", str(tmp_path / "test.db"))
+
+    def fake_run_backtest(symbol, strategy_id, start, end, **kwargs):
+        return {"starting_capital": 100000.0, "ending_capital": 105000.0,
+                "metrics": {"total_trades": 0, "win_rate": 0.0}}
+
+    monkeypatch.setattr(backtest, "run_backtest", fake_run_backtest)
+    monkeypatch.setattr(
+        "sys.argv",
+        ["backtest.py", "--symbol", "RELIANCE", "--strategy", "DONCHIAN_BRK",
+         "--start", "2022-01-01", "--end", "2023-01-01"],
+    )
+    backtest._cli()
+
+    captured = capsys.readouterr()
+    assert "VaR 95% (10-day): not enough data" in captured.out
+
+
 def test_cli_prints_clean_error_on_failure_instead_of_raw_traceback(monkeypatch, tmp_path, capsys):
     """A malformed date or any other run_backtest failure should print one clean
     line and exit(1), not dump a multi-frame traceback on a user running this from
