@@ -4,17 +4,20 @@ from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
+import math
+
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
 from dashboard.db import get_session
 from dashboard.components.sidebar import render_sidebar
-from dashboard.components.header import render_header
+from dashboard.components.header import render_header, selected_market
 from dashboard.components.ticker_ribbon import render_ticker_ribbon
 from dashboard.components.notifications import check_and_notify
 from dashboard.components.equity_curve import KAIROS_CHART_LAYOUT
 from database.models import Trade, PortfolioSnapshot
+from engine.backtest_metrics import historical_var, conditional_var
 
 st.set_page_config(page_title="KAIROS · Analysis", page_icon="⚡", layout="wide")
 st.markdown(f"<style>{(Path(__file__).parent.parent / 'style.css').read_text()}</style>", unsafe_allow_html=True)
@@ -25,6 +28,46 @@ check_and_notify(db)
 render_header()
 render_ticker_ribbon()
 st.markdown('<h2 class="kairos-heading">Analysis</h2>', unsafe_allow_html=True)
+
+st.markdown('<div class="glass-card no-glow">', unsafe_allow_html=True)
+st.markdown('<p style="color:var(--text-secondary);font-size:13px;margin-bottom:8px;">Value at Risk</p>', unsafe_allow_html=True)
+
+var_snapshots = db.query(PortfolioSnapshot).filter(
+    PortfolioSnapshot.market == selected_market()
+).order_by(PortfolioSnapshot.date).all()
+var_equity_curve = [s.portfolio_value for s in var_snapshots if s.portfolio_value is not None]
+
+var_95 = historical_var(var_equity_curve, confidence=0.95)
+var_99 = historical_var(var_equity_curve, confidence=0.99)
+cvar_95 = conditional_var(var_equity_curve, confidence=0.95)
+cvar_99 = conditional_var(var_equity_curve, confidence=0.99)
+
+if var_95 is None:
+    st.info(
+        f"Not enough portfolio history yet for VaR (have {len(var_equity_curve)} daily "
+        f"snapshots). This fills in automatically as paper/live trading accumulates more days."
+    )
+else:
+    var_cols = st.columns(4)
+    for col, label, value in [
+        (var_cols[0], "VaR 95%", var_95), (var_cols[1], "VaR 99%", var_99),
+        (var_cols[2], "CVaR 95%", cvar_95), (var_cols[3], "CVaR 99%", cvar_99),
+    ]:
+        with col:
+            one_day = f"{value:.2%}"
+            ten_day = f"{value * math.sqrt(10):.2%}"
+            st.markdown(
+                f"""
+                <div class="glass-card" style="padding:11px 13px;">
+                    <p class="kpi-label" style="margin:0 0 4px;">{label}</p>
+                    <p class="kpi-value" style="font-size:18px;margin:0 0 2px;">{one_day}</p>
+                    <p style="font-size:11px;color:var(--text-secondary);margin:0;">10-day: {ten_day}</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+st.markdown('</div>', unsafe_allow_html=True)
+st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
 
 closed_trades = db.query(Trade).filter(Trade.net_pnl.isnot(None)).all()
 
