@@ -52,6 +52,7 @@ def test_backtest_models_create_and_roundtrip(tmp_path):
         symbol="RELIANCE", strategy_id="DONCHIAN_BRK", market="INDIA",
         params_json="{}", start_date="2023-01-01", end_date="2023-06-01",
         starting_capital=100000.0, ending_capital=105000.0, total_trades=1,
+        var_95=-0.04, var_99=-0.06, cvar_95=-0.05, cvar_99=-0.07,
     )
     db.add(run)
     db.commit()
@@ -69,6 +70,8 @@ def test_backtest_models_create_and_roundtrip(tmp_path):
     fetched_run = db.query(BacktestRun).filter(BacktestRun.run_id == run.run_id).first()
     fetched_trades = db.query(BacktestTrade).filter(BacktestTrade.run_id == run.run_id).all()
     assert fetched_run.symbol == "RELIANCE"
+    assert fetched_run.var_95 == -0.04
+    assert fetched_run.cvar_99 == -0.07
     assert len(fetched_trades) == 1
     assert fetched_trades[0].outcome == "WIN"
 

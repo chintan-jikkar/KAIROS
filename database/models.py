@@ -191,6 +191,10 @@ class BacktestRun(Base):
     avg_rr_achieved = Column(Float, nullable=True)
     total_net_pnl = Column(Float, nullable=True)
     total_costs = Column(Float, nullable=True)
+    var_95 = Column(Float, nullable=True)
+    var_99 = Column(Float, nullable=True)
+    cvar_95 = Column(Float, nullable=True)
+    cvar_99 = Column(Float, nullable=True)
 
 
 class BacktestTrade(Base):
