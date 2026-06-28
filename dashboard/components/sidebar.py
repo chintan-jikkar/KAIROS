@@ -9,6 +9,7 @@ NAV_ITEMS = [
     ("Strategies", "ti-target", "/Strategies"),
     ("Markets", "ti-world", "/Markets"),
     ("Analysis", "ti-chart-line", "/Analysis"),
+    ("Backtests", "ti-history", "/Backtest_Results"),
     ("Settings", "ti-settings", "/Settings"),
 ]
 
