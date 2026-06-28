@@ -291,6 +291,10 @@ def _persist_run(db, result: dict, params: dict | None) -> None:
         avg_rr_achieved=metrics["avg_rr_achieved"],
         total_net_pnl=metrics["total_net_pnl"],
         total_costs=metrics["total_costs"],
+        var_95=metrics["var_95"],
+        var_99=metrics["var_99"],
+        cvar_95=metrics["cvar_95"],
+        cvar_99=metrics["cvar_99"],
     )
     db.add(run)
     db.flush()

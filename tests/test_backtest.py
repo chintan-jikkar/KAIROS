@@ -592,6 +592,7 @@ def test_persist_run_writes_run_and_trades_with_correct_linkage(tmp_path):
             "total_trades": 1, "win_rate": 1.0, "profit_factor": float("inf"),
             "sharpe_ratio": 1.2, "max_drawdown_pct": -0.05, "avg_rr_achieved": 2.0,
             "total_net_pnl": 2456.93, "total_costs": 12.07,
+            "var_95": -0.03, "var_99": -0.05, "cvar_95": -0.04, "cvar_99": -0.06,
         },
         "trades": [{
             "symbol": "RELIANCE", "strategy_id": "DONCHIAN_BRK",
@@ -609,6 +610,8 @@ def test_persist_run_writes_run_and_trades_with_correct_linkage(tmp_path):
     saved_run = db.query(BacktestRun).filter(BacktestRun.symbol == "RELIANCE").first()
     assert saved_run is not None
     assert saved_run.run_id is not None
+    assert saved_run.var_95 == -0.03
+    assert saved_run.cvar_99 == -0.06
     saved_trades = db.query(BacktestTrade).filter(BacktestTrade.run_id == saved_run.run_id).all()
     assert len(saved_trades) == 1
     assert saved_trades[0].net_pnl == 2456.93
