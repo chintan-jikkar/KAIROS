@@ -6,12 +6,15 @@ ranked by combined ATR% + volume-ratio score. Auto-assigns best-fit strategy.
 import pandas as pd
 from loguru import logger
 
-from data.market_data import fetch_india_daily
+from data.market_data import fetch_india_daily, fetch_us_daily
 from data.indicators import add_all_strategy_indicators, add_atr_pct, add_volume_ratio
 from data.universe import (
     get_india_all_symbols,
+    get_us_all_symbols,
     INDIA_SCREEN_CRITERIA,
+    US_SCREEN_CRITERIA,
     STRATEGY_ASSIGNMENT_RULES,
+    US_STRATEGY_ASSIGNMENT_RULES,
 )
 from engine.signals import STRATEGY_REGISTRY
 
@@ -65,6 +68,50 @@ def run_india_screener(top_n: int | None = 6) -> list[dict]:
 
     ranked = df.to_dict(orient="records")
     logger.info(f"Screener selected {len(ranked)} stocks: {[r['symbol'] for r in ranked]}")
+    return ranked
+
+
+def run_us_screener(top_n: int | None = 6) -> list[dict]:
+    """
+    Returns a ranked list of dicts with the same shape as run_india_screener.
+    SPY daily data is fetched once here and passed to each symbol evaluation
+    to avoid one API call per symbol for beta computation.
+    """
+    spy_df = fetch_us_daily("SPY", period="3mo")
+    if spy_df.empty or len(spy_df) < 2:
+        logger.warning("Could not fetch SPY data for beta computation — aborting US screener")
+        return []
+    spy_closes = spy_df["close"].tolist()
+    spy_returns = [
+        (spy_closes[i] - spy_closes[i - 1]) / spy_closes[i - 1]
+        for i in range(1, len(spy_closes))
+    ]
+
+    symbols = get_us_all_symbols()
+    results = []
+
+    for symbol in symbols:
+        try:
+            record = _evaluate_symbol_us(symbol, spy_returns)
+            if record:
+                results.append(record)
+        except Exception as exc:
+            logger.warning(f"US screener skipped {symbol}: {exc}")
+
+    if not results:
+        logger.warning("US screener returned 0 qualifying stocks")
+        return []
+
+    df = pd.DataFrame(results)
+    df["atr_norm"] = df["atr_pct"] / df["atr_pct"].max()
+    df["vol_norm"] = df["vol_ratio"] / df["vol_ratio"].max()
+    df["score"] = (df["atr_norm"] * 60 + df["vol_norm"] * 40).round(1)
+    df = df.sort_values("score", ascending=False)
+    if top_n is not None:
+        df = df.head(top_n)
+
+    ranked = df.to_dict(orient="records")
+    logger.info(f"US screener selected {len(ranked)} stocks: {[r['symbol'] for r in ranked]}")
     return ranked
 
 
@@ -126,6 +173,64 @@ def _evaluate_symbol(symbol: str) -> dict | None:
         "has_live_signal": signal is not None,
         "target_price": round(signal["target_price"], 2) if signal else None,
         "score": 0.0,  # filled by caller after normalisation
+    }
+
+
+def _evaluate_symbol_us(symbol: str, spy_returns: list[float]) -> dict | None:
+    c = US_SCREEN_CRITERIA
+
+    df = fetch_us_daily(symbol, period="3mo")
+    if df.empty or len(df) < 60:
+        return None
+
+    df = add_all_strategy_indicators(df)
+    last = df.iloc[-1]
+
+    price = float(last["close"])
+    lo, hi = c["price_range_usd"]
+    if not (lo <= price <= hi):
+        return None
+
+    avg_vol = float(df["volume"].tail(20).mean())
+    if avg_vol < c["min_avg_daily_volume"]:
+        return None
+
+    atr_pct = float(last.get("atr_pct_14", 0))
+    if atr_pct < c["min_atr_pct_14d"]:
+        return None
+
+    rsi14 = float(last.get("rsi_14", 50))
+    rsi_lo, rsi_hi = c["rsi14_range"]
+    if not (rsi_lo <= rsi14 <= rsi_hi):
+        return None
+
+    vol_ratio = float(last.get("vol_ratio_20", 1.0))
+    adx = float(last.get("adx_14")) if last.get("adx_14") is not None else None
+
+    closes = df["close"].tolist()
+    symbol_returns = [(closes[i] - closes[i - 1]) / closes[i - 1] for i in range(1, len(closes))]
+    beta = _compute_beta_vs_spy(symbol_returns, spy_returns)
+
+    strategy_id = _assign_strategy(
+        atr_pct=atr_pct, beta=beta, vol_ratio=vol_ratio, adx=adx,
+        rules=US_STRATEGY_ASSIGNMENT_RULES,
+    )
+
+    signal = STRATEGY_REGISTRY[strategy_id]().generate_signal(symbol, df)
+
+    return {
+        "symbol": symbol,
+        "price": round(price, 2),
+        "atr_pct": round(atr_pct, 2),
+        "vol_ratio": round(vol_ratio, 2),
+        "avg_volume": int(avg_vol),
+        "rsi14": round(rsi14, 1),
+        "beta": round(beta, 2),
+        "adx": round(adx, 1) if adx is not None else None,
+        "assigned_strategy": strategy_id,
+        "has_live_signal": signal is not None,
+        "target_price": round(signal["target_price"], 2) if signal else None,
+        "score": 0.0,
     }
 
 
