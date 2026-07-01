@@ -20,10 +20,12 @@ INDIA_MASTER_POOL = {
     ],
 }
 
-US_MASTER_POOL = [
-    "NVDA", "TSLA", "AMD", "META", "AAPL",
-    "SPY", "QQQ", "MSFT", "AMZN", "GOOGL",
-]
+US_MASTER_POOL = {
+    "large_cap_momentum": ["AAPL", "MSFT", "GOOGL", "AMZN", "META"],
+    "high_atr_volatile":  ["NVDA", "TSLA", "AMD", "COIN", "PLTR"],
+    "defensive_reversal": ["JNJ", "PG", "KO", "PEP", "WMT"],
+    "broad_etf":          ["SPY", "QQQ", "DIA", "IWM"],
+}
 
 INDIA_SCREEN_CRITERIA = {
     "min_avg_daily_volume": 500_000,
@@ -64,9 +66,28 @@ STRATEGY_ASSIGNMENT_RULES = {
     "BB_MEANREV":   {"adx_max": 20, "atr_min": 1.5},
 }
 
-# Flat list of all India symbols for convenience
+# Initial thresholds — calibrated in Task 8 after a real run against live yfinance data.
+# Structure mirrors STRATEGY_ASSIGNMENT_RULES; same cascade priority order.
+US_STRATEGY_ASSIGNMENT_RULES = {
+    "RSI2_OVN":     {"beta_max": 1.3,  "atr_max": 3.0},
+    "ORB_BRK":      {"atr_min": 2.5,   "beta_min": 1.1},
+    "MOM_CONT":     {"atr_min": 3.0,   "volume_ratio_min": 1.5},
+    "SUPERTREND":   {"adx_min": 25,    "atr_min": 2.5},
+    "TREND_EMA":    {"adx_min": 25,    "atr_max": 2.5},
+    "DONCHIAN_BRK": {"adx_min": 20,    "adx_max": 25},
+    "BB_MEANREV":   {"adx_max": 20,    "atr_min": 2.0},
+}
+
+
 def get_india_all_symbols() -> list[str]:
     symbols = []
     for group in INDIA_MASTER_POOL.values():
         symbols.extend(group)
     return list(dict.fromkeys(symbols))  # deduplicate, preserve order
+
+
+def get_us_all_symbols() -> list[str]:
+    symbols = []
+    for group in US_MASTER_POOL.values():
+        symbols.extend(group)
+    return list(dict.fromkeys(symbols))
