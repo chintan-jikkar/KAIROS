@@ -89,3 +89,57 @@ def test_assign_strategy_india_default_unchanged():
     from engine.screener import _assign_strategy
     result = _assign_strategy(atr_pct=4.0, beta=1.1, vol_ratio=2.0, adx=30.0)
     assert result == "MOM_CONT"
+
+
+# ---------------------------------------------------------------------------
+# US cascade tests — values derived from live 2026-07-01 screener run
+# ---------------------------------------------------------------------------
+
+def test_assign_strategy_us_orb_brk_high_beta():
+    """COIN-like: ATR=6.95%, beta=2.08 → ORB_BRK (high-beta volatile, beta≥1.5 threshold)."""
+    from engine.screener import _assign_strategy
+    from data.universe import US_STRATEGY_ASSIGNMENT_RULES
+    result = _assign_strategy(atr_pct=6.95, beta=2.08, vol_ratio=0.97, adx=21.6,
+                              rules=US_STRATEGY_ASSIGNMENT_RULES)
+    assert result == "ORB_BRK"
+
+
+def test_assign_strategy_us_supertrend_trending():
+    """AMZN-like: ATR=3.48%, beta=1.26, ADX=27.6 → SUPERTREND.
+    beta=1.26 misses ORB_BRK (beta_min=1.5); strong trend (ADX≥25) lands SUPERTREND."""
+    from engine.screener import _assign_strategy
+    from data.universe import US_STRATEGY_ASSIGNMENT_RULES
+    result = _assign_strategy(atr_pct=3.48, beta=1.26, vol_ratio=0.61, adx=27.6,
+                              rules=US_STRATEGY_ASSIGNMENT_RULES)
+    assert result == "SUPERTREND"
+
+
+def test_assign_strategy_us_supertrend_low_beta():
+    """PLTR-like: ATR=5.30%, beta=0.89, ADX=26.2 → SUPERTREND.
+    Low beta misses ORB_BRK; high ADX with high ATR → SUPERTREND."""
+    from engine.screener import _assign_strategy
+    from data.universe import US_STRATEGY_ASSIGNMENT_RULES
+    result = _assign_strategy(atr_pct=5.30, beta=0.89, vol_ratio=1.15, adx=26.2,
+                              rules=US_STRATEGY_ASSIGNMENT_RULES)
+    assert result == "SUPERTREND"
+
+
+def test_assign_strategy_us_donchian_moderate_adx():
+    """MSFT-like: ATR=3.48%, beta=0.52, ADX=23.2 → DONCHIAN_BRK.
+    Low beta misses ORB_BRK; ADX 20–25 slots into DONCHIAN band."""
+    from engine.screener import _assign_strategy
+    from data.universe import US_STRATEGY_ASSIGNMENT_RULES
+    result = _assign_strategy(atr_pct=3.48, beta=0.52, vol_ratio=0.71, adx=23.2,
+                              rules=US_STRATEGY_ASSIGNMENT_RULES)
+    assert result == "DONCHIAN_BRK"
+
+
+def test_assign_strategy_us_bb_meanrev_below_orb_beta():
+    """beta=1.49 (just below ORB_BRK threshold of 1.5), ADX=18 → BB_MEANREV.
+    Verifies the calibrated beta_min=1.5 boundary: 1.49 misses ORB_BRK, falls
+    to BB_MEANREV (ADX≤20, ATR≥2.0)."""
+    from engine.screener import _assign_strategy
+    from data.universe import US_STRATEGY_ASSIGNMENT_RULES
+    result = _assign_strategy(atr_pct=3.0, beta=1.49, vol_ratio=0.7, adx=18.0,
+                              rules=US_STRATEGY_ASSIGNMENT_RULES)
+    assert result == "BB_MEANREV"

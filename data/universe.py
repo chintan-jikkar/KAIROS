@@ -40,7 +40,7 @@ INDIA_SCREEN_CRITERIA = {
 US_SCREEN_CRITERIA = {
     "min_avg_daily_volume": 2_000_000,
     "min_atr_pct_14d": 2.5,
-    "price_range_usd": (20, 500),
+    "price_range_usd": (20, 750),   # raised from 500 — META (~$616) and AMD (~$546) were blocked
     "rsi14_range": (35, 65),
     "no_earnings_within_days": 10,
 }
@@ -68,7 +68,7 @@ STRATEGY_ASSIGNMENT_RULES = {
 # Structure mirrors STRATEGY_ASSIGNMENT_RULES; same cascade priority order.
 US_STRATEGY_ASSIGNMENT_RULES = {
     "RSI2_OVN":     {"beta_max": 1.3,  "atr_max": 3.0},
-    "ORB_BRK":      {"atr_min": 2.5,   "beta_min": 1.1},  # 1.1 is the live value; US beta computed from real SPY returns
+    "ORB_BRK":      {"atr_min": 2.5,   "beta_min": 1.5},  # calibrated 2026-07-01: COIN/TSLA/NVDA all beta≥1.9; 1.1 let AMZN (beta=1.26, ADX=27.6) jump the queue ahead of SUPERTREND
     "MOM_CONT":     {"atr_min": 3.0,   "volume_ratio_min": 1.5},
     "SUPERTREND":   {"adx_min": 25,    "atr_min": 2.5},
     "TREND_EMA":    {"adx_min": 25,    "atr_max": 2.5},
