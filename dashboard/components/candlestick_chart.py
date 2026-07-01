@@ -16,7 +16,7 @@ import streamlit as st
 from plotly.subplots import make_subplots
 
 from dashboard.components.equity_curve import KAIROS_CHART_LAYOUT
-from data.market_data import fetch_india_daily
+from data.market_data import fetch_india_daily, fetch_us_daily
 from database.models import Trade
 
 _PERIODS = {"1M": "1mo", "3M": "3mo", "6M": "6mo", "1Y": "1y", "2Y": "2y"}
@@ -64,11 +64,13 @@ def render_candlestick_chart(
             placeholder="Add indicator overlay...",
         )
 
-    if market != "INDIA":
-        st.info("Candlestick chart currently supports India market symbols only.")
+    if market == "US":
+        df = fetch_us_daily(symbol, period=_PERIODS[timeframe])
+    elif market == "INDIA":
+        df = fetch_india_daily(symbol, period=_PERIODS[timeframe])
+    else:
+        st.info("Candlestick chart currently supports India and US market symbols only.")
         return
-
-    df = fetch_india_daily(symbol, period=_PERIODS[timeframe])
     if df.empty:
         st.info("No price data available.")
         return
@@ -104,6 +106,8 @@ def render_candlestick_chart(
         x=df.index, y=df["volume"], marker_color=vol_colors, showlegend=False,
     ), row=2, col=1)
 
+    currency_sym = "$" if market == "US" else "₹"
+
     if show_trades:
         trades = db.query(Trade).filter(Trade.symbol == symbol, Trade.market == market).all()
         entries_x, entries_y = [], []
@@ -121,14 +125,14 @@ def render_candlestick_chart(
                 x=entries_x, y=entries_y, mode="markers", name="Entry",
                 marker=dict(symbol="triangle-up", size=11, color="#F0C040",
                             line=dict(width=1, color="#0A0A0A")),
-                showlegend=False, hovertemplate="Entry ₹%{y:,.2f}<extra></extra>",
+                showlegend=False, hovertemplate=f"Entry {currency_sym}%{{y:,.2f}}<extra></extra>",
             ), row=1, col=1)
         if exits_x:
             fig.add_trace(go.Scatter(
                 x=exits_x, y=exits_y, mode="markers", name="Exit",
                 marker=dict(symbol="triangle-down", size=11, color=exit_colors,
                             line=dict(width=1, color="#0A0A0A")),
-                showlegend=False, hovertemplate="Exit ₹%{y:,.2f}<extra></extra>",
+                showlegend=False, hovertemplate=f"Exit {currency_sym}%{{y:,.2f}}<extra></extra>",
             ), row=1, col=1)
 
     fig.update_layout(
