@@ -70,12 +70,12 @@ STRATEGY_ASSIGNMENT_RULES = {
 # Structure mirrors STRATEGY_ASSIGNMENT_RULES; same cascade priority order.
 US_STRATEGY_ASSIGNMENT_RULES = {
     "RSI2_OVN":     {"beta_max": 1.3,  "atr_max": 3.0},
-    "ORB_BRK":      {"atr_min": 2.5,   "beta_min": 1.1},
+    "ORB_BRK":      {"atr_min": 2.5,   "beta_min": 1.1},  # 1.1 is the live value; US beta computed from real SPY returns
     "MOM_CONT":     {"atr_min": 3.0,   "volume_ratio_min": 1.5},
     "SUPERTREND":   {"adx_min": 25,    "atr_min": 2.5},
     "TREND_EMA":    {"adx_min": 25,    "atr_max": 2.5},
     "DONCHIAN_BRK": {"adx_min": 20,    "adx_max": 25},
-    "BB_MEANREV":   {"adx_max": 20,    "atr_min": 2.0},
+    "BB_MEANREV":   {"adx_max": 20,    "atr_min": 2.0},  # raised from India's 1.5; US baseline vol is higher
 }
 
 
@@ -90,4 +90,4 @@ def get_us_all_symbols() -> list[str]:
     symbols = []
     for group in US_MASTER_POOL.values():
         symbols.extend(group)
-    return list(dict.fromkeys(symbols))
+    return list(dict.fromkeys(symbols))  # deduplicate, preserve order
