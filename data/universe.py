@@ -32,7 +32,6 @@ INDIA_SCREEN_CRITERIA = {
     "min_atr_pct_14d": 1.5,
     "min_price_inr": 50,
     "max_price_inr": 5_000,
-    "min_beta": 0.9,
     "rsi14_range": (30, 70),
     "no_earnings_within_days": 7,
     "min_market_cap_cr": 5_000,

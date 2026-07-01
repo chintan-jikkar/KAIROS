@@ -72,11 +72,11 @@ class Executor:
             return {"status": "REJECTED", "reason": reason, "trade_id": None}
 
         # 4. Position count limit
-        if not check_position_limit(self.db):
+        if not check_position_limit(self.db, self.market):
             return {"status": "REJECTED", "reason": "Max concurrent positions reached", "trade_id": None}
 
         # 5. Portfolio heat check
-        if not check_portfolio_heat(self.db, portfolio_value):
+        if not check_portfolio_heat(self.db, portfolio_value, self.market):
             return {"status": "REJECTED", "reason": "Max portfolio heat reached", "trade_id": None}
 
         # 6. Position sizing (reduce 50% if VIX elevated)
@@ -90,6 +90,7 @@ class Executor:
             entry_price=signal["entry_price"],
             stop_price=signal["stop_price"],
             risk_pct=risk_pct,
+            market=self.market,
         )
         if quantity <= 0:
             return {"status": "REJECTED", "reason": "Calculated quantity = 0", "trade_id": None}
