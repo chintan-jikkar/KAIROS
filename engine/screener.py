@@ -16,6 +16,22 @@ from data.universe import (
 from engine.signals import STRATEGY_REGISTRY
 
 
+def _compute_beta_vs_spy(symbol_returns: list[float], spy_returns: list[float]) -> float:
+    """beta = cov(symbol, spy) / var(spy). Pure Python, no numpy dependency."""
+    n = min(len(symbol_returns), len(spy_returns))
+    if n < 2:
+        return 1.0
+    s = symbol_returns[-n:]
+    m = spy_returns[-n:]
+    mean_s = sum(s) / n
+    mean_m = sum(m) / n
+    cov = sum((s[i] - mean_s) * (m[i] - mean_m) for i in range(n)) / (n - 1)
+    var_m = sum((m[i] - mean_m) ** 2 for i in range(n)) / (n - 1)
+    if var_m == 0:
+        return 1.0
+    return round(cov / var_m, 4)
+
+
 def run_india_screener(top_n: int | None = 6) -> list[dict]:
     """
     Returns a ranked list of dicts, each with:
