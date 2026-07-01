@@ -27,7 +27,7 @@ def _compute_beta_vs_spy(symbol_returns: list[float], spy_returns: list[float]) 
     mean_m = sum(m) / n
     cov = sum((s[i] - mean_s) * (m[i] - mean_m) for i in range(n)) / (n - 1)
     var_m = sum((m[i] - mean_m) ** 2 for i in range(n)) / (n - 1)
-    if var_m == 0:
+    if var_m == 0:  # exact equality safe: inputs are literal zeros, not computed floats
         return 1.0
     return round(cov / var_m, 4)
 
