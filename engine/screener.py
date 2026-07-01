@@ -129,9 +129,13 @@ def _evaluate_symbol(symbol: str) -> dict | None:
     }
 
 
-def _assign_strategy(atr_pct: float, beta: float, vol_ratio: float, adx: float | None = None) -> str:
-    rules = STRATEGY_ASSIGNMENT_RULES
-
+def _assign_strategy(
+    atr_pct: float,
+    beta: float,
+    vol_ratio: float,
+    adx: float | None = None,
+    rules: dict = STRATEGY_ASSIGNMENT_RULES,
+) -> str:
     # Priority cascade: most specific/extreme conditions first, RSI2_OVN is the catch-all.
     if (atr_pct >= rules["MOM_CONT"]["atr_min"]
             and vol_ratio >= rules["MOM_CONT"]["volume_ratio_min"]):

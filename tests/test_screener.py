@@ -46,3 +46,46 @@ def test_beta_mismatched_length_uses_shorter():
     # symbol_returns is longer; last 5 elements match spy exactly → beta == 1.0
     symbol_returns = [0.99, 0.98] + spy  # 7 elements, last 5 identical to spy
     assert abs(_compute_beta_vs_spy(symbol_returns, spy) - 1.0) < 1e-6
+
+
+def test_assign_strategy_india_mom_cont():
+    """High ATR + high vol_ratio → MOM_CONT for India rules."""
+    from engine.screener import _assign_strategy
+    from data.universe import STRATEGY_ASSIGNMENT_RULES
+    result = _assign_strategy(atr_pct=4.0, beta=1.1, vol_ratio=2.0, adx=30.0,
+                              rules=STRATEGY_ASSIGNMENT_RULES)
+    assert result == "MOM_CONT"
+
+
+def test_assign_strategy_india_supertrend():
+    """High ADX + high ATR but low beta (misses ORB_BRK) → SUPERTREND."""
+    from engine.screener import _assign_strategy
+    from data.universe import STRATEGY_ASSIGNMENT_RULES
+    result = _assign_strategy(atr_pct=3.0, beta=0.9, vol_ratio=1.0, adx=28.0,
+                              rules=STRATEGY_ASSIGNMENT_RULES)
+    assert result == "SUPERTREND"
+
+
+def test_assign_strategy_india_rsi2_ovn_catchall():
+    """Low ATR, low ADX, unmatched → RSI2_OVN catch-all."""
+    from engine.screener import _assign_strategy
+    from data.universe import STRATEGY_ASSIGNMENT_RULES
+    result = _assign_strategy(atr_pct=1.0, beta=1.0, vol_ratio=1.0, adx=10.0,
+                              rules=STRATEGY_ASSIGNMENT_RULES)
+    assert result == "RSI2_OVN"
+
+
+def test_assign_strategy_us_rules_accepted():
+    """US rules dict is accepted without error; catch-all returns RSI2_OVN."""
+    from engine.screener import _assign_strategy
+    from data.universe import US_STRATEGY_ASSIGNMENT_RULES
+    result = _assign_strategy(atr_pct=1.0, beta=0.5, vol_ratio=0.8, adx=10.0,
+                              rules=US_STRATEGY_ASSIGNMENT_RULES)
+    assert result == "RSI2_OVN"
+
+
+def test_assign_strategy_india_default_unchanged():
+    """Calling _assign_strategy without rules= still uses India rules (no regression)."""
+    from engine.screener import _assign_strategy
+    result = _assign_strategy(atr_pct=4.0, beta=1.1, vol_ratio=2.0, adx=30.0)
+    assert result == "MOM_CONT"
