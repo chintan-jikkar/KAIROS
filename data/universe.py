@@ -42,7 +42,6 @@ US_SCREEN_CRITERIA = {
     "min_avg_daily_volume": 2_000_000,
     "min_atr_pct_14d": 2.5,
     "price_range_usd": (20, 500),
-    "min_beta": 1.1,
     "rsi14_range": (35, 65),
     "no_earnings_within_days": 10,
 }
