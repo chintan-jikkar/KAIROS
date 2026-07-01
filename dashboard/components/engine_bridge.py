@@ -7,14 +7,15 @@ independent processes.
 import json
 import subprocess
 
-import streamlit as st
-
 from config.settings import ENGINE_PYTHON, PROJECT_ROOT
 
 
 def run_screener(market: str = "INDIA", top_n: int | None = 6, timeout: int = 120) -> tuple[list[dict], str | None]:
     """Returns (results, error_message). error_message is None on success."""
-    screener_fn = "run_us_screener" if market == "US" else "run_india_screener"
+    _SCREENER_MAP = {"INDIA": "run_india_screener", "US": "run_us_screener"}
+    if market not in _SCREENER_MAP:
+        return [], f"Unknown market '{market}'. Valid values: {list(_SCREENER_MAP)}."
+    screener_fn = _SCREENER_MAP[market]
     code = (
         "import json; "
         f"from engine.screener import {screener_fn}; "
