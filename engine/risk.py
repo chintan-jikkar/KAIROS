@@ -4,7 +4,9 @@ The circuit breaker is sacred: HALT → no new entries, no exceptions.
 """
 from __future__ import annotations
 
+import json
 from datetime import datetime, date, timedelta
+from pathlib import Path
 
 import yfinance as yf
 from loguru import logger
@@ -42,6 +44,15 @@ RISK_PARAMS = {
     # genuinely diversified holdings.
     "max_correlation_threshold": 0.70,
 }
+
+# Merge any user-saved overrides from the dashboard Settings page.
+# Fail open — a corrupt/missing file must never block the engine from starting.
+_OVERRIDES_PATH = Path(__file__).resolve().parent.parent / "config" / "risk_overrides.json"
+if _OVERRIDES_PATH.exists():
+    try:
+        RISK_PARAMS.update(json.loads(_OVERRIDES_PATH.read_text()))
+    except Exception:
+        pass
 
 
 def calculate_position_size(
