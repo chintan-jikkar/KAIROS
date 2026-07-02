@@ -10,7 +10,9 @@ from datetime import datetime
 from loguru import logger
 from sqlalchemy.orm import Session
 
-from database.models import Trade
+import json
+
+from database.models import Trade, PendingSignal
 
 
 def market_currency_symbol(market: str) -> str:
@@ -202,3 +204,39 @@ def get_open_trade(db: Session, symbol: str) -> Trade | None:
         .filter(Trade.symbol == symbol, Trade.timestamp_exit.is_(None))
         .first()
     )
+
+
+# --------------------------------------------------------------------------- #
+# Pending signal persistence (MOM_CONT crash-recovery)                         #
+# --------------------------------------------------------------------------- #
+
+def save_pending_signal(db: Session, market: str, signal: dict) -> None:
+    """Persist a deferred MOM_CONT signal so it survives an overnight process restart."""
+    row = PendingSignal(
+        market=market,
+        symbol=signal["symbol"],
+        strategy_id=signal.get("strategy_id", "MOM_CONT"),
+        signal_json=json.dumps(signal),
+    )
+    db.add(row)
+    db.commit()
+
+
+def load_pending_signals(db: Session, market: str) -> list[dict]:
+    """Return unconsumed pending signals for the given market as plain dicts."""
+    rows = (
+        db.query(PendingSignal)
+        .filter(PendingSignal.market == market, PendingSignal.is_consumed.is_(False))
+        .all()
+    )
+    return [json.loads(r.signal_json) for r in rows]
+
+
+def clear_pending_signals(db: Session, market: str) -> None:
+    """Mark all pending signals for the given market as consumed after gap confirmation."""
+    (
+        db.query(PendingSignal)
+        .filter(PendingSignal.market == market, PendingSignal.is_consumed.is_(False))
+        .update({"is_consumed": True})
+    )
+    db.commit()

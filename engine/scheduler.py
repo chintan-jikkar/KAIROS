@@ -35,6 +35,7 @@ from config.settings import (
 from data.market_data import fetch_india_daily
 from database.models import Base
 from database.portfolio import get_latest_snapshot
+from database.trade_log import save_pending_signal, load_pending_signals, clear_pending_signals
 from engine.executor import Executor
 from engine.screener import run_india_screener
 from engine.signals import (
@@ -105,10 +106,16 @@ def job_morning_check():
 def job_confirm_momentum():
     """09:30 IST — confirm or cancel deferred MOM_CONT signals from previous EOD."""
     global _pending_momentum_signals
-    if not _pending_momentum_signals:
-        return
 
     db = _make_session()
+
+    # Crash-recovery: if in-memory list is empty (process restarted overnight), reload from DB.
+    if not _pending_momentum_signals:
+        _pending_momentum_signals = load_pending_signals(db, ACTIVE_MARKET)
+    if not _pending_momentum_signals:
+        db.close()
+        return
+
     from config.settings import STARTING_CAPITAL_INR
     snap = get_latest_snapshot(db, ACTIVE_MARKET)
     capital = snap.portfolio_value if snap else STARTING_CAPITAL_INR
@@ -121,6 +128,7 @@ def job_confirm_momentum():
         logger.info(f"MOM_CONT entry: {signal['symbol']} → {result['status']} ({result['reason']})")
 
     _pending_momentum_signals.clear()
+    clear_pending_signals(db, ACTIVE_MARKET)
     db.close()
 
 
@@ -198,6 +206,7 @@ def job_eod_scan():
     for signal in signals:
         if signal.get("deferred"):
             _pending_momentum_signals.append(signal)
+            save_pending_signal(db, ACTIVE_MARKET, signal)
             logger.info(f"MOM_CONT deferred: {signal['symbol']} — checking gap at next open")
         else:
             result = executor.execute_entry(signal)

@@ -197,6 +197,19 @@ class BacktestRun(Base):
     cvar_99 = Column(Float, nullable=True)
 
 
+class PendingSignal(Base):
+    """Deferred MOM_CONT signals persisted so they survive a process crash overnight."""
+    __tablename__ = "pending_signals"
+
+    pending_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    market = Column(String, nullable=False)
+    symbol = Column(String, nullable=False)
+    strategy_id = Column(String, nullable=False)
+    signal_json = Column(Text, nullable=False)
+    is_consumed = Column(Boolean, default=False)
+
+
 class BacktestTrade(Base):
     """One row per simulated trade, linked to its BacktestRun by run_id (plain string
     column, no FK constraint — consistent with every other model in this file)."""
