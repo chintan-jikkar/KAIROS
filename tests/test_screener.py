@@ -180,3 +180,58 @@ def test_india_real_beta_below_orb_threshold_bb_meanrev():
     result = _assign_strategy(atr_pct=2.6, beta=0.8, vol_ratio=0.9, adx=18.0,
                               rules=STRATEGY_ASSIGNMENT_RULES)
     assert result == "BB_MEANREV"
+
+
+# --------------------------------------------------------------------------- #
+# Earnings blackout filter                                                      #
+# --------------------------------------------------------------------------- #
+
+def test_has_earnings_soon_returns_true_when_within_window():
+    """Earnings date 3 days out with a 7-day window → True (skip the stock)."""
+    import datetime
+    from unittest.mock import patch, MagicMock
+    from engine.screener import _has_earnings_soon
+
+    today = datetime.date.today()
+    upcoming = today + datetime.timedelta(days=3)
+    mock_ticker = MagicMock()
+    mock_ticker.calendar = {"Earnings Date": [upcoming]}
+
+    with patch("engine.screener.yf.Ticker", return_value=mock_ticker):
+        assert _has_earnings_soon("AAPL", 7) is True
+
+
+def test_has_earnings_soon_returns_false_when_outside_window():
+    """Earnings date 14 days out with a 7-day window → False (allow the stock)."""
+    import datetime
+    from unittest.mock import patch, MagicMock
+    from engine.screener import _has_earnings_soon
+
+    today = datetime.date.today()
+    far_future = today + datetime.timedelta(days=14)
+    mock_ticker = MagicMock()
+    mock_ticker.calendar = {"Earnings Date": [far_future]}
+
+    with patch("engine.screener.yf.Ticker", return_value=mock_ticker):
+        assert _has_earnings_soon("AAPL", 7) is False
+
+
+def test_has_earnings_soon_fails_open_on_empty_calendar():
+    """No calendar data → False (fail open so India stocks without coverage pass through)."""
+    from unittest.mock import patch, MagicMock
+    from engine.screener import _has_earnings_soon
+
+    mock_ticker = MagicMock()
+    mock_ticker.calendar = {}
+
+    with patch("engine.screener.yf.Ticker", return_value=mock_ticker):
+        assert _has_earnings_soon("RELIANCE.NS", 7) is False
+
+
+def test_has_earnings_soon_fails_open_on_api_exception():
+    """Any exception from yfinance → False (fail open, never crash the screener)."""
+    from unittest.mock import patch
+    from engine.screener import _has_earnings_soon
+
+    with patch("engine.screener.yf.Ticker", side_effect=Exception("network error")):
+        assert _has_earnings_soon("RELIANCE.NS", 7) is False

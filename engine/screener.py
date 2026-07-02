@@ -3,7 +3,10 @@ Weekly stock universe screener — runs every Sunday 20:00 IST.
 Filters INDIA_MASTER_POOL against INDIA_SCREEN_CRITERIA and returns top 5-6 stocks
 ranked by combined ATR% + volume-ratio score. Auto-assigns best-fit strategy.
 """
+import datetime
+
 import pandas as pd
+import yfinance as yf
 from loguru import logger
 
 from data.market_data import fetch_india_daily, fetch_us_daily
@@ -17,6 +20,24 @@ from data.universe import (
     US_STRATEGY_ASSIGNMENT_RULES,
 )
 from engine.signals import STRATEGY_REGISTRY
+
+
+def _has_earnings_soon(ticker_str: str, days: int) -> bool:
+    """Return True if yfinance reports an earnings date within `days` calendar days
+    from today. Fails open — returns False on any API failure or missing data so
+    that stocks without calendar coverage (common for NSE) are not wrongly excluded."""
+    try:
+        cal = yf.Ticker(ticker_str).calendar
+        if not cal:
+            return False
+        dates = cal.get("Earnings Date") or []
+        if not isinstance(dates, list):
+            dates = [dates]
+        today = datetime.date.today()
+        cutoff = today + datetime.timedelta(days=days)
+        return any(d is not None and today <= d <= cutoff for d in dates)
+    except Exception:
+        return False
 
 
 def _compute_beta_vs_spy(symbol_returns: list[float], spy_returns: list[float]) -> float:
@@ -159,6 +180,12 @@ def _evaluate_symbol(symbol: str, nifty_returns: list[float] | None = None) -> d
     if not (rsi_lo <= rsi14 <= rsi_hi):
         return None
 
+    # Earnings blackout filter — skip if earnings within the configured window
+    no_earnings_days = c.get("no_earnings_within_days")
+    if no_earnings_days and _has_earnings_soon(f"{symbol}.NS", no_earnings_days):
+        logger.debug(f"Screener skipped {symbol}: earnings within {no_earnings_days} days")
+        return None
+
     vol_ratio = float(last.get("vol_ratio_20", 1.0))
     adx = float(last.get("adx_14")) if last.get("adx_14") is not None else None
 
@@ -215,6 +242,12 @@ def _evaluate_symbol_us(symbol: str, spy_returns: list[float]) -> dict | None:
     rsi14 = float(last.get("rsi_14", 50))
     rsi_lo, rsi_hi = c["rsi14_range"]
     if not (rsi_lo <= rsi14 <= rsi_hi):
+        return None
+
+    # Earnings blackout filter — skip if earnings within the configured window
+    no_earnings_days = c.get("no_earnings_within_days")
+    if no_earnings_days and _has_earnings_soon(symbol, no_earnings_days):
+        logger.debug(f"US screener skipped {symbol}: earnings within {no_earnings_days} days")
         return None
 
     vol_ratio = float(last.get("vol_ratio_20", 1.0))
