@@ -61,9 +61,21 @@ def fetch_india_intraday(symbol: str, interval: str = "15m",
 # US — NYSE / NASDAQ via yfinance                                              #
 # --------------------------------------------------------------------------- #
 
-def fetch_us_daily(symbol: str, period: str = "1y") -> pd.DataFrame:
-    df = yf.download(symbol, period=period, interval="1d",
-                     auto_adjust=True, progress=False)
+def fetch_us_daily(symbol: str, period: str = "1y",
+                   start: str | None = None, end: str | None = None) -> pd.DataFrame:
+    """
+    Fetch daily OHLCV for a US symbol (NYSE/NASDAQ via yfinance).
+    period: yfinance period string — "1mo", "3mo", "6mo", "1y", "2y" — ignored if start/end given.
+    start, end: optional fixed historical window ("YYYY-MM-DD"), e.g. for backtesting a
+    specific date range. Takes priority over `period` when given, matching yfinance's own
+    precedence — existing call sites that only pass `period` are unaffected.
+    """
+    if start or end:
+        df = yf.download(symbol, start=start, end=end, interval="1d",
+                         auto_adjust=True, progress=False)
+    else:
+        df = yf.download(symbol, period=period, interval="1d",
+                         auto_adjust=True, progress=False)
     if df.empty:
         logger.warning(f"No data returned for {symbol}")
         return pd.DataFrame()
