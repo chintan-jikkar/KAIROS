@@ -10,7 +10,7 @@ import streamlit as st
 
 from dashboard.db import get_session
 from dashboard.components.sidebar import render_sidebar
-from dashboard.components.header import render_header
+from dashboard.components.header import render_header, selected_market
 from dashboard.components.ticker_ribbon import render_ticker_ribbon
 from dashboard.components.notifications import check_and_notify
 from dashboard.components.strategy_card import render_strategy_card
@@ -52,20 +52,22 @@ _universe = json.loads(universe_cache_path.read_text()) if universe_cache_path.e
 def _universe_symbols_for(strategy_id: str) -> list[str]:
     return [s["symbol"] for s in _universe if s.get("assigned_strategy") == strategy_id]
 
+market = selected_market()
+
 left_col, right_col = st.columns([1.3, 1])
 
 with left_col:
     st.markdown('<p style="color:var(--text-secondary);font-size:13px;margin-bottom:8px;">Active strategies</p>', unsafe_allow_html=True)
 
     for strategy_id, name in STRATEGY_LIBRARY.items():
-        closed = db.query(Trade).filter(Trade.strategy_id == strategy_id, Trade.net_pnl.isnot(None)).all()
-        open_count = db.query(Trade).filter(Trade.strategy_id == strategy_id, Trade.timestamp_exit.is_(None)).count()
+        closed = db.query(Trade).filter(Trade.strategy_id == strategy_id, Trade.market == market, Trade.net_pnl.isnot(None)).all()
+        open_count = db.query(Trade).filter(Trade.strategy_id == strategy_id, Trade.market == market, Trade.timestamp_exit.is_(None)).count()
 
         wins = [t for t in closed if t.outcome == "WIN"]
         win_rate = (len(wins) / len(closed) * 100) if closed else 0.0
         avg_rr = (sum(t.actual_rr_achieved or 0 for t in closed) / len(closed)) if closed else 0.0
         net_pnl = sum(t.net_pnl for t in closed) if closed else 0.0
-        symbols = sorted({t.symbol for t in closed} | {t.symbol for t in db.query(Trade).filter(Trade.strategy_id == strategy_id, Trade.timestamp_exit.is_(None)).all()})
+        symbols = sorted({t.symbol for t in closed} | {t.symbol for t in db.query(Trade).filter(Trade.strategy_id == strategy_id, Trade.market == market, Trade.timestamp_exit.is_(None)).all()})
         traded_today = any(t.timestamp_exit and t.timestamp_exit.date() == date.today() for t in closed)
 
         render_strategy_card(
@@ -90,9 +92,10 @@ with left_col:
                 st.caption("No candidate symbols yet — run the screener first.")
             else:
                 pick = st.selectbox("Symbol", candidate_symbols, key=f"try_pick_{strategy_id}")
-                quote = fetch_quote(f"{pick}.NS")
+                ticker = f"{pick}.NS" if market == "INDIA" else pick
+                quote = fetch_quote(ticker)
                 render_manual_paper_trade_button(
-                    pick, market="INDIA",
+                    pick, market=market,
                     current_price=quote["price"] if quote else None,
                     recommended_strategy=strategy_id,
                     key_context=strategy_id,
