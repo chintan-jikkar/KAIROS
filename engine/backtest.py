@@ -29,7 +29,7 @@ HISTORY_BUFFER_DAYS = 365  # warms up SMA200/EMA200/ADX etc. before `start`
 # with concepts like an opening range that don't exist on a daily bar) and are
 # explicitly out of scope per the spec, even though both are valid keys in
 # engine.signals.STRATEGY_REGISTRY for live trading.
-SUPPORTED_STRATEGIES = {"RSI2_OVN", "MOM_CONT", "TREND_EMA", "DONCHIAN_BRK", "SUPERTREND"}
+SUPPORTED_STRATEGIES = {"RSI2_OVN", "MOM_CONT", "TREND_EMA", "DONCHIAN_BRK", "MACD_CROSS", "SUPERTREND"}
 
 # MOM_CONT's entry is confirmed on the bar AFTER the signal (gap-check at that bar's open) —
 # every other in-scope strategy enters same-bar at that bar's close.

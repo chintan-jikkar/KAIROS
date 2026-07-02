@@ -59,6 +59,7 @@ STRATEGY_ASSIGNMENT_RULES = {
     "SUPERTREND":   {"adx_min": 25, "atr_min": 2.5},
     "TREND_EMA":    {"adx_min": 25, "atr_max": 2.5},
     "DONCHIAN_BRK": {"adx_min": 20, "adx_max": 25},
+    "MACD_CROSS":   {"adx_min": 15, "adx_max": 20},
     "BB_MEANREV":   {"adx_max": 20, "atr_min": 1.5},
 }
 
@@ -71,6 +72,7 @@ US_STRATEGY_ASSIGNMENT_RULES = {
     "SUPERTREND":   {"adx_min": 25,    "atr_min": 2.5},
     "TREND_EMA":    {"adx_min": 25,    "atr_max": 2.5},
     "DONCHIAN_BRK": {"adx_min": 20,    "adx_max": 25},
+    "MACD_CROSS":   {"adx_min": 15,    "adx_max": 20},
     "BB_MEANREV":   {"adx_max": 20,    "atr_min": 2.0},  # raised from India's 1.5; US baseline vol is higher
 }
 

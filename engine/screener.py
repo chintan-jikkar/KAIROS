@@ -332,6 +332,10 @@ def _assign_strategy(
     if (adx is not None and rules["DONCHIAN_BRK"]["adx_min"] <= adx < rules["DONCHIAN_BRK"]["adx_max"]):
         return "DONCHIAN_BRK"
 
+    if (adx is not None and "MACD_CROSS" in rules
+            and rules["MACD_CROSS"]["adx_min"] <= adx < rules["MACD_CROSS"]["adx_max"]):
+        return "MACD_CROSS"
+
     if (adx is not None and adx <= rules["BB_MEANREV"]["adx_max"]
             and atr_pct >= rules["BB_MEANREV"]["atr_min"]):
         return "BB_MEANREV"

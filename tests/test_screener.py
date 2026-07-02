@@ -135,14 +135,14 @@ def test_assign_strategy_us_donchian_moderate_adx():
 
 
 def test_assign_strategy_us_bb_meanrev_below_orb_beta():
-    """beta=1.49 (just below ORB_BRK threshold of 1.5), ADX=18 → BB_MEANREV.
-    Verifies the calibrated beta_min=1.5 boundary: 1.49 misses ORB_BRK, falls
-    to BB_MEANREV (ADX≤20, ATR≥2.0)."""
+    """beta=1.49 (just below ORB_BRK threshold of 1.5), ADX=18 → MACD_CROSS.
+    Verifies the calibrated beta_min=1.5 boundary: 1.49 misses ORB_BRK; ADX=18
+    lands in MACD_CROSS (15≤ADX<20 band), not BB_MEANREV."""
     from engine.screener import _assign_strategy
     from data.universe import US_STRATEGY_ASSIGNMENT_RULES
     result = _assign_strategy(atr_pct=3.0, beta=1.49, vol_ratio=0.7, adx=18.0,
                               rules=US_STRATEGY_ASSIGNMENT_RULES)
-    assert result == "BB_MEANREV"
+    assert result == "MACD_CROSS"
 
 
 # ---------------------------------------------------------------------------
@@ -162,24 +162,24 @@ def test_india_real_beta_high_beta_orb_brk():
 
 
 def test_india_real_beta_low_beta_falls_past_orb():
-    """HINDUNILVR-like: beta=0.3 (defensive FMCG), ATR=2.6%, ADX=18 → BB_MEANREV.
-    With hardcoded beta=1.0 this would have been ORB_BRK — real beta fixes it."""
+    """HINDUNILVR-like: beta=0.3 (defensive FMCG), ATR=2.6%, ADX=18 → MACD_CROSS.
+    Misses ORB_BRK (beta=0.3 < beta_min=0.95); ADX=18 lands in MACD_CROSS band."""
     from engine.screener import _assign_strategy
     from data.universe import STRATEGY_ASSIGNMENT_RULES
     result = _assign_strategy(atr_pct=2.6, beta=0.3, vol_ratio=1.0, adx=18.0,
                               rules=STRATEGY_ASSIGNMENT_RULES)
-    assert result == "BB_MEANREV"
+    assert result == "MACD_CROSS"
 
 
 def test_india_real_beta_below_orb_threshold_bb_meanrev():
-    """beta=0.8 (just below ORB_BRK beta_min=0.95), ATR=2.6% (meets atr_min=2.5), ADX=18 → BB_MEANREV.
-    ORB_BRK fails because of beta alone (ATR passes). Falls to BB_MEANREV (ADX≤20, ATR≥1.5).
-    With old hardcoded beta=1.0 this same stock would have landed ORB_BRK."""
+    """beta=0.8 (just below ORB_BRK beta_min=0.95), ATR=2.6%, ADX=18 → MACD_CROSS.
+    ORB_BRK fails because of beta alone (ATR passes). ADX=18 lands in MACD_CROSS
+    (15≤ADX<20), not BB_MEANREV — BB_MEANREV is now ADX<15."""
     from engine.screener import _assign_strategy
     from data.universe import STRATEGY_ASSIGNMENT_RULES
     result = _assign_strategy(atr_pct=2.6, beta=0.8, vol_ratio=0.9, adx=18.0,
                               rules=STRATEGY_ASSIGNMENT_RULES)
-    assert result == "BB_MEANREV"
+    assert result == "MACD_CROSS"
 
 
 # --------------------------------------------------------------------------- #
@@ -566,3 +566,153 @@ def test_correlation_check_wired_into_executor(monkeypatch):
     result = executor.execute_entry(signal)
     assert result["status"] == "REJECTED"
     assert "0.70" in result["reason"] or "0.95" in result["reason"]
+
+
+# ---------------------------------------------------------------------------
+# MACD Crossover strategy tests
+# ---------------------------------------------------------------------------
+
+import pandas as pd
+
+
+def _macd_df(
+    close_prev=100.0, close_last=101.0,
+    macd_prev=-0.5, macd_last=0.3,
+    macd_signal_prev=0.1, macd_signal_last=0.1,
+    macd_hist_last=0.2,
+    sma_50=95.0,
+    atr=2.0,
+):
+    """Minimal DataFrame fixture for MACD_CROSS tests — fresh bullish cross by default."""
+    return pd.DataFrame({
+        "close":       [close_prev, close_last],
+        "sma_50":      [sma_50, sma_50],
+        "macd":        [macd_prev, macd_last],
+        "macd_signal": [macd_signal_prev, macd_signal_last],
+        "macd_hist":   [-0.6, macd_hist_last],
+        "atr_14":      [atr, atr],
+    })
+
+
+def test_macd_cross_generates_buy_signal_on_fresh_bullish_crossover():
+    from strategies.macd_crossover import MACDCrossoverStrategy
+    df = _macd_df()  # prev: macd(-0.5) <= signal(0.1); last: macd(0.3) > signal(0.1)
+    signal = MACDCrossoverStrategy().generate_signal("TEST", df)
+    assert signal is not None
+    assert signal["action"] == "BUY"
+    assert signal["strategy_id"] == "MACD_CROSS"
+    assert signal["entry_price"] == 101.0
+    assert signal["stop_price"] < signal["entry_price"]
+    assert signal["target_price"] > signal["entry_price"]
+
+
+def test_macd_cross_stop_and_target_respect_atr_and_rr():
+    from strategies.macd_crossover import MACDCrossoverStrategy, DEFAULT_PARAMS
+    df = _macd_df(close_last=100.0, atr=2.0)
+    signal = MACDCrossoverStrategy().generate_signal("TEST", df)
+    assert signal is not None
+    expected_stop = 100.0 - DEFAULT_PARAMS["atr_stop_multiplier"] * 2.0
+    expected_target = 100.0 + DEFAULT_PARAMS["atr_stop_multiplier"] * 2.0 * DEFAULT_PARAMS["risk_reward"]
+    assert abs(signal["stop_price"] - expected_stop) < 1e-6
+    assert abs(signal["target_price"] - expected_target) < 1e-6
+
+
+def test_macd_cross_no_signal_if_already_above_signal_on_prev_bar():
+    from strategies.macd_crossover import MACDCrossoverStrategy
+    # MACD was already above signal on prev bar — not a fresh cross
+    df = _macd_df(macd_prev=0.3, macd_last=0.5)
+    signal = MACDCrossoverStrategy().generate_signal("TEST", df)
+    assert signal is None
+
+
+def test_macd_cross_no_signal_if_price_below_sma50():
+    from strategies.macd_crossover import MACDCrossoverStrategy
+    df = _macd_df(close_last=101.0, sma_50=110.0)  # price below SMA50
+    signal = MACDCrossoverStrategy().generate_signal("TEST", df)
+    assert signal is None
+
+
+def test_macd_cross_no_signal_if_histogram_not_positive():
+    from strategies.macd_crossover import MACDCrossoverStrategy
+    df = _macd_df(macd_hist_last=-0.1)  # hist negative despite MACD above signal
+    signal = MACDCrossoverStrategy().generate_signal("TEST", df)
+    assert signal is None
+
+
+def test_macd_cross_no_signal_if_too_short():
+    from strategies.macd_crossover import MACDCrossoverStrategy
+    df = _macd_df().iloc[:1]  # only 1 row
+    signal = MACDCrossoverStrategy().generate_signal("TEST", df)
+    assert signal is None
+
+
+def test_macd_cross_exits_on_stop():
+    from strategies.macd_crossover import MACDCrossoverStrategy
+    trade = {"entry_price": 100.0, "stop_loss_price": 97.0, "target_price": 109.0, "hold_days": 1}
+    bar = {"close": 96.5, "macd_hist": 0.2}
+    should, reason = MACDCrossoverStrategy().should_exit(trade, bar)
+    assert should is True
+    assert reason == "STOP"
+
+
+def test_macd_cross_exits_on_target():
+    from strategies.macd_crossover import MACDCrossoverStrategy
+    trade = {"entry_price": 100.0, "stop_loss_price": 97.0, "target_price": 109.0, "hold_days": 1}
+    bar = {"close": 109.5, "macd_hist": 0.2}
+    should, reason = MACDCrossoverStrategy().should_exit(trade, bar)
+    assert should is True
+    assert reason == "TARGET"
+
+
+def test_macd_cross_exits_on_macd_histogram_negative():
+    from strategies.macd_crossover import MACDCrossoverStrategy
+    trade = {"entry_price": 100.0, "stop_loss_price": 97.0, "target_price": 109.0, "hold_days": 5}
+    bar = {"close": 103.0, "macd_hist": -0.05}
+    should, reason = MACDCrossoverStrategy().should_exit(trade, bar)
+    assert should is True
+    assert reason == "MACD_EXIT"
+
+
+def test_macd_cross_exits_on_time_stop():
+    from strategies.macd_crossover import MACDCrossoverStrategy, DEFAULT_PARAMS
+    trade = {"entry_price": 100.0, "stop_loss_price": 97.0, "target_price": 109.0,
+             "hold_days": DEFAULT_PARAMS["max_hold_days"]}
+    bar = {"close": 103.0, "macd_hist": 0.1}  # still positive hist, but time's up
+    should, reason = MACDCrossoverStrategy().should_exit(trade, bar)
+    assert should is True
+    assert reason == "TIME_STOP"
+
+
+def test_macd_cross_no_exit_when_in_profit_and_momentum_positive():
+    from strategies.macd_crossover import MACDCrossoverStrategy
+    trade = {"entry_price": 100.0, "stop_loss_price": 97.0, "target_price": 109.0, "hold_days": 3}
+    bar = {"close": 104.0, "macd_hist": 0.3}
+    should, reason = MACDCrossoverStrategy().should_exit(trade, bar)
+    assert should is False
+
+
+def test_assign_strategy_macd_cross_in_cascade():
+    """ADX 15–20 range → MACD_CROSS (between DONCHIAN_BRK and BB_MEANREV)."""
+    from engine.screener import _assign_strategy
+    from data.universe import STRATEGY_ASSIGNMENT_RULES
+    result = _assign_strategy(atr_pct=2.0, beta=1.0, vol_ratio=1.0, adx=17.0,
+                              rules=STRATEGY_ASSIGNMENT_RULES)
+    assert result == "MACD_CROSS"
+
+
+def test_assign_strategy_donchian_still_gets_adx_20_to_25():
+    """DONCHIAN_BRK range unchanged — ADX 20–25 still lands there."""
+    from engine.screener import _assign_strategy
+    from data.universe import STRATEGY_ASSIGNMENT_RULES
+    result = _assign_strategy(atr_pct=2.0, beta=1.0, vol_ratio=1.0, adx=22.0,
+                              rules=STRATEGY_ASSIGNMENT_RULES)
+    assert result == "DONCHIAN_BRK"
+
+
+def test_assign_strategy_bb_meanrev_still_gets_low_adx():
+    """BB_MEANREV range unchanged — very low ADX with sufficient ATR."""
+    from engine.screener import _assign_strategy
+    from data.universe import STRATEGY_ASSIGNMENT_RULES
+    result = _assign_strategy(atr_pct=2.0, beta=1.0, vol_ratio=1.0, adx=10.0,
+                              rules=STRATEGY_ASSIGNMENT_RULES)
+    assert result == "BB_MEANREV"

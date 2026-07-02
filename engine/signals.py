@@ -21,6 +21,7 @@ from strategies.momentum_continuation import MomentumContinuationStrategy
 from strategies.trend_ema import TrendEMAStrategy
 from strategies.bb_meanrev import BBMeanReversionStrategy
 from strategies.donchian_breakout import DonchianBreakoutStrategy
+from strategies.macd_crossover import MACDCrossoverStrategy
 from strategies.supertrend import SupertrendStrategy
 
 # Strategies evaluated on intraday (15-min) bars rather than daily bars
@@ -34,6 +35,7 @@ STRATEGY_REGISTRY = {
     "TREND_EMA": TrendEMAStrategy,
     "BB_MEANREV": BBMeanReversionStrategy,
     "DONCHIAN_BRK": DonchianBreakoutStrategy,
+    "MACD_CROSS": MACDCrossoverStrategy,
     "SUPERTREND": SupertrendStrategy,
 }
 

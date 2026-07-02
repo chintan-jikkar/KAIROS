@@ -14,5 +14,6 @@ STRATEGY_NAMES = {
     "TREND_EMA": "Trend following (50/200 EMA cross)",
     "BB_MEANREV": "Intraday Bollinger mean reversion",
     "DONCHIAN_BRK": "Donchian/Turtle channel breakout",
+    "MACD_CROSS": "MACD momentum crossover",
     "SUPERTREND": "Supertrend",
 }
