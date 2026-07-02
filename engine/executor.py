@@ -65,7 +65,8 @@ class Executor:
         peak_value = portfolio_value if snap is None else (snap.peak_value or portfolio_value)
 
         status, reason = check_circuit_breakers(
-            self.db, portfolio_value, peak_value, self.market
+            self.db, portfolio_value, peak_value, self.market,
+            strategy_id=signal.get("strategy_id", ""),
         )
         if status == "HALT":
             logger.warning(f"HALT — skipping {symbol}: {reason}")

@@ -71,15 +71,23 @@ def calculate_position_size(
     return round(units, 4)
 
 
+# Mean-reversion strategies thrive in high-volatility regimes — VIX spikes
+# produce deeper oversold extremes and faster reversions, so halting them during
+# high-VIX periods removes their best opportunities.
+MEANREV_STRATEGIES = {"RSI2_OVN", "BB_MEANREV"}
+
+
 def check_circuit_breakers(
     db: Session,
     portfolio_value: float,
     peak_portfolio_value: float,
     market: str = "INDIA",
+    strategy_id: str = "",
 ) -> tuple[str, str]:
     """
     Returns (status, reason).
     status: 'NORMAL' | 'REDUCE_50PCT' | 'HALT'
+    Mean-reversion strategies (RSI2_OVN, BB_MEANREV) skip the VIX filter.
     """
     # 1. Max drawdown from peak
     drawdown_pct = (portfolio_value - peak_portfolio_value) / peak_portfolio_value
@@ -102,19 +110,20 @@ def check_circuit_breakers(
         logger.warning(msg)
         return "HALT", msg
 
-    # 4. VIX regime filter
-    vix = _get_vix(market)
-    if vix is not None:
-        extreme = RISK_PARAMS[f"{market.lower()}_vix_extreme_threshold"]
-        high = RISK_PARAMS[f"{market.lower()}_vix_high_threshold"]
-        if vix > extreme:
-            msg = f"VIX={vix:.1f} extreme. No new entries."
-            logger.warning(msg)
-            return "HALT", msg
-        if vix > high:
-            msg = f"VIX={vix:.1f} elevated. Reducing position size 50%."
-            logger.info(msg)
-            return "REDUCE_50PCT", msg
+    # 4. VIX regime filter — skipped for mean-reversion strategies
+    if strategy_id not in MEANREV_STRATEGIES:
+        vix = _get_vix(market)
+        if vix is not None:
+            extreme = RISK_PARAMS[f"{market.lower()}_vix_extreme_threshold"]
+            high = RISK_PARAMS[f"{market.lower()}_vix_high_threshold"]
+            if vix > extreme:
+                msg = f"VIX={vix:.1f} extreme. No new entries."
+                logger.warning(msg)
+                return "HALT", msg
+            if vix > high:
+                msg = f"VIX={vix:.1f} elevated. Reducing position size 50%."
+                logger.info(msg)
+                return "REDUCE_50PCT", msg
 
     return "NORMAL", "All systems operational."
 

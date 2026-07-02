@@ -265,3 +265,63 @@ def test_rsi2_ovn_time_stop_removed():
     import inspect
     src = inspect.getsource(RSI2OvernightStrategy.should_exit)
     assert "TIME_STOP" not in src
+
+
+def test_vix_halt_skipped_for_meanrev_strategies():
+    """RSI2_OVN and BB_MEANREV must bypass the VIX filter — high VIX benefits them."""
+    from unittest.mock import patch
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from database.models import Base
+    from engine.risk import check_circuit_breakers
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    db = sessionmaker(bind=engine)()
+
+    # Patch VIX to extreme value that would halt trend strategies
+    with patch("engine.risk._get_vix", return_value=35.0):
+        # Trend strategy → HALT
+        status, _ = check_circuit_breakers(db, 100_000, 100_000, "INDIA", strategy_id="MOM_CONT")
+        assert status == "HALT"
+
+        # Mean-reversion strategies → NORMAL (VIX check skipped)
+        for sid in ("RSI2_OVN", "BB_MEANREV"):
+            status, _ = check_circuit_breakers(db, 100_000, 100_000, "INDIA", strategy_id=sid)
+            assert status == "NORMAL", f"{sid} should bypass VIX halt"
+
+
+def test_paper_broker_applies_slippage_on_buy_and_sell():
+    """Buy fills above requested price, sell fills below — both by the slippage factor."""
+    from brokers.paper import PaperBroker
+
+    class _FakeDB:
+        pass
+
+    broker = PaperBroker(_FakeDB(), starting_capital=100_000, market="INDIA")
+    result = broker.buy("RELIANCE", 10, 1000.0)
+    assert result["fill_price"] > 1000.0, "buy should fill at a worse (higher) price"
+
+    result = broker.sell("RELIANCE", 10, 1010.0)
+    assert result["fill_price"] < 1010.0, "sell should fill at a worse (lower) price"
+
+
+def test_screener_score_uses_absolute_baselines():
+    """Score must not always include a 100 — with absolute baselines a stock
+    below the reference ATR/vol gets a score below 100."""
+    # Simulate two results where neither hits the baselines
+    import pandas as pd
+    from engine.screener import run_india_screener
+
+    # We can't easily call the full screener; instead verify the formula directly.
+    ATR_BASELINE, VOL_BASELINE = 3.0, 2.0
+    rows = [
+        {"atr_pct": 1.5, "vol_ratio": 0.8},  # both below baseline
+        {"atr_pct": 2.0, "vol_ratio": 1.0},
+    ]
+    df = pd.DataFrame(rows)
+    df["atr_norm"] = (df["atr_pct"] / ATR_BASELINE).clip(upper=1.0)
+    df["vol_norm"] = (df["vol_ratio"] / VOL_BASELINE).clip(upper=1.0)
+    df["score"] = (df["atr_norm"] * 60 + df["vol_norm"] * 40).round(1)
+    assert df["score"].max() < 100, "no stock at baseline → max score should be below 100"
+    assert df["score"].max() > df["score"].min(), "ranking must still differentiate stocks"

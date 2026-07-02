@@ -119,7 +119,7 @@ def job_confirm_momentum():
     from config.settings import STARTING_CAPITAL_INR
     snap = get_latest_snapshot(db, ACTIVE_MARKET)
     capital = snap.portfolio_value if snap else STARTING_CAPITAL_INR
-    broker = PaperBroker(db, capital)
+    broker = PaperBroker(db, capital, market=ACTIVE_MARKET)
 
     confirmed = confirm_momentum_entries(_pending_momentum_signals, db, ACTIVE_MARKET)
     executor = _make_executor(db, broker)
@@ -141,7 +141,7 @@ def job_orb_scan():
     db = _make_session()
     snap = get_latest_snapshot(db, ACTIVE_MARKET)
     capital = snap.portfolio_value if snap else STARTING_CAPITAL_INR
-    broker = PaperBroker(db, capital)
+    broker = PaperBroker(db, capital, market=ACTIVE_MARKET)
     executor = _make_executor(db, broker)
 
     market_green = _get_market_is_green()
@@ -158,7 +158,7 @@ def job_meanrev_scan():
     db = _make_session()
     snap = get_latest_snapshot(db, ACTIVE_MARKET)
     capital = snap.portfolio_value if snap else STARTING_CAPITAL_INR
-    broker = PaperBroker(db, capital)
+    broker = PaperBroker(db, capital, market=ACTIVE_MARKET)
     executor = _make_executor(db, broker)
 
     signals = run_meanrev_scan(_active_universe, db, ACTIVE_MARKET)
@@ -179,7 +179,7 @@ def job_check_exits():
     db = _make_session()
     snap = get_latest_snapshot(db, ACTIVE_MARKET)
     capital = snap.portfolio_value if snap else STARTING_CAPITAL_INR
-    broker = PaperBroker(db, capital)
+    broker = PaperBroker(db, capital, market=ACTIVE_MARKET)
     executor = _make_executor(db, broker)
 
     to_exit = check_exits_for_open_trades(db)
@@ -197,7 +197,7 @@ def job_eod_scan():
     db = _make_session()
     snap = get_latest_snapshot(db, ACTIVE_MARKET)
     capital = snap.portfolio_value if snap else STARTING_CAPITAL_INR
-    broker = PaperBroker(db, capital)
+    broker = PaperBroker(db, capital, market=ACTIVE_MARKET)
     executor = _make_executor(db, broker)
 
     market_green = _get_market_is_green()
@@ -220,7 +220,7 @@ def job_eod_exit():
     db = _make_session()
     snap = get_latest_snapshot(db, ACTIVE_MARKET)
     capital = snap.portfolio_value if snap else STARTING_CAPITAL_INR
-    broker = PaperBroker(db, capital)
+    broker = PaperBroker(db, capital, market=ACTIVE_MARKET)
     executor = _make_executor(db, broker)
 
     from database.trade_log import get_open_trades
@@ -249,7 +249,7 @@ def job_eod_snapshot():
     db = _make_session()
     snap = get_latest_snapshot(db, ACTIVE_MARKET)
     capital = snap.portfolio_value if snap else STARTING_CAPITAL_INR
-    broker = PaperBroker(db, capital)
+    broker = PaperBroker(db, capital, market=ACTIVE_MARKET)
     executor = _make_executor(db, broker)
 
     prices = _get_current_prices(_active_universe)

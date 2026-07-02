@@ -91,10 +91,15 @@ def run_india_screener(top_n: int | None = 6) -> list[dict]:
         logger.warning("Screener returned 0 qualifying stocks")
         return []
 
-    # Rank by composite score: atr_pct (60%) + vol_ratio (40%), both normalised
+    # Rank by composite score against fixed absolute baselines (not relative to
+    # this week's best) so scores are comparable across different screener runs.
+    # India baselines: ATR 3.0% and vol_ratio 2.0x represent a genuinely active
+    # trending name; anything at or above baseline scores the full 60 or 40 points.
+    ATR_BASELINE = 3.0
+    VOL_BASELINE = 2.0
     df = pd.DataFrame(results)
-    df["atr_norm"] = df["atr_pct"] / df["atr_pct"].max()
-    df["vol_norm"] = df["vol_ratio"] / df["vol_ratio"].max()
+    df["atr_norm"] = (df["atr_pct"] / ATR_BASELINE).clip(upper=1.0)
+    df["vol_norm"] = (df["vol_ratio"] / VOL_BASELINE).clip(upper=1.0)
     df["score"] = (df["atr_norm"] * 60 + df["vol_norm"] * 40).round(1)
     df = df.sort_values("score", ascending=False)
     if top_n is not None:
@@ -136,9 +141,12 @@ def run_us_screener(top_n: int | None = 6) -> list[dict]:
         logger.warning("US screener returned 0 qualifying stocks")
         return []
 
+    # Absolute baselines — US large-caps are more volatile than NSE names.
+    ATR_BASELINE = 3.5
+    VOL_BASELINE = 2.0
     df = pd.DataFrame(results)
-    df["atr_norm"] = df["atr_pct"] / df["atr_pct"].max()
-    df["vol_norm"] = df["vol_ratio"] / df["vol_ratio"].max()
+    df["atr_norm"] = (df["atr_pct"] / ATR_BASELINE).clip(upper=1.0)
+    df["vol_norm"] = (df["vol_ratio"] / VOL_BASELINE).clip(upper=1.0)
     df["score"] = (df["atr_norm"] * 60 + df["vol_norm"] * 40).round(1)
     df = df.sort_values("score", ascending=False)
     if top_n is not None:
