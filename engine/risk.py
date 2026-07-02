@@ -36,6 +36,11 @@ RISK_PARAMS = {
     # US VIX thresholds
     "us_vix_high_threshold": 25.0,
     "us_vix_extreme_threshold": 30.0,
+
+    # Correlation cap — skip entry if 60-day Pearson r with any open position exceeds this.
+    # 0.70 blocks highly co-moving pairs (same sector, related ETFs) while allowing
+    # genuinely diversified holdings.
+    "max_correlation_threshold": 0.70,
 }
 
 
@@ -150,6 +155,80 @@ def check_portfolio_heat(db: Session, portfolio_value: float, market: str = "IND
     )
     heat_pct = total_risk / portfolio_value if portfolio_value else 0
     return heat_pct < RISK_PARAMS["max_portfolio_heat_pct"]
+
+
+def _daily_returns(closes: list[float]) -> list[float]:
+    return [(closes[i] - closes[i - 1]) / closes[i - 1] for i in range(1, len(closes))]
+
+
+def _pearson_r(x: list[float], y: list[float]) -> float:
+    """60-day Pearson correlation. Pure Python, no numpy. Returns 0.0 when undefined."""
+    n = min(len(x), len(y))
+    if n < 2:
+        return 0.0
+    x, y = x[-n:], y[-n:]
+    mean_x = sum(x) / n
+    mean_y = sum(y) / n
+    num = sum((x[i] - mean_x) * (y[i] - mean_y) for i in range(n))
+    den_x = sum((xi - mean_x) ** 2 for xi in x) ** 0.5
+    den_y = sum((yi - mean_y) ** 2 for yi in y) ** 0.5
+    if den_x == 0 or den_y == 0:
+        return 0.0
+    return round(num / (den_x * den_y), 4)
+
+
+def check_correlation_risk(
+    db: Session,
+    candidate: str,
+    market: str = "INDIA",
+    threshold: float | None = None,
+) -> tuple[bool, str]:
+    """
+    Returns (True, "") if safe to enter, (False, reason) if the candidate's 60-day
+    return series is too correlated with an existing open position.
+    Fails open — any yfinance error is treated as uncorrelated so it never silently
+    blocks entries due to a transient API outage.
+    """
+    from data.market_data import fetch_india_daily, fetch_us_daily
+
+    if threshold is None:
+        threshold = RISK_PARAMS["max_correlation_threshold"]
+
+    open_trades = db.query(Trade).filter(
+        Trade.timestamp_exit.is_(None),
+        Trade.market == market,
+    ).all()
+    if not open_trades:
+        return True, ""
+
+    fetch_fn = fetch_india_daily if market == "INDIA" else fetch_us_daily
+
+    try:
+        cand_df = fetch_fn(candidate, period="3mo")
+    except Exception:
+        return True, ""  # fail open
+    if cand_df.empty or len(cand_df) < 2:
+        return True, ""
+
+    cand_returns = _daily_returns(cand_df["close"].tolist())
+
+    for trade in open_trades:
+        if trade.symbol == candidate:
+            continue
+        try:
+            pos_df = fetch_fn(trade.symbol, period="3mo")
+        except Exception:
+            continue  # treat as uncorrelated
+        if pos_df.empty or len(pos_df) < 2:
+            continue
+        pos_returns = _daily_returns(pos_df["close"].tolist())
+        r = _pearson_r(cand_returns, pos_returns)
+        if abs(r) > threshold:
+            msg = f"r({candidate}, {trade.symbol})={r:.2f} > {threshold} — skipping entry"
+            logger.info(f"Correlation block: {msg}")
+            return False, msg
+
+    return True, ""
 
 
 # --------------------------------------------------------------------------- #

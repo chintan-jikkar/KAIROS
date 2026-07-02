@@ -67,6 +67,34 @@ def _make_executor(db, broker):
     )
 
 
+_market_open_cache: dict[str, bool] = {}  # key: "INDIA:2026-07-01"
+
+
+def _is_market_open(market: str = "INDIA") -> bool:
+    """Return False on exchange holidays — no intraday bars means no trading today.
+    Result is cached per market per calendar day so every job in the same process day
+    shares a single yfinance call. Fails open on any fetch error."""
+    from data.market_data import fetch_india_intraday, fetch_us_intraday
+    today = datetime.now(IST).strftime("%Y-%m-%d")
+    cache_key = f"{market}:{today}"
+    if cache_key in _market_open_cache:
+        return _market_open_cache[cache_key]
+
+    ticker = "^NSEI" if market == "INDIA" else "SPY"
+    try:
+        df = fetch_india_intraday(ticker, interval="1m", period="1d") if market == "INDIA" \
+            else fetch_us_intraday(ticker, interval="1m", period="1d")
+        result = not df.empty
+        if not result:
+            logger.info(f"Market holiday guard: no intraday bars for {ticker} — skipping today")
+    except Exception as exc:
+        logger.warning(f"Holiday check failed for {market}: {exc}")
+        result = True  # fail open
+
+    _market_open_cache[cache_key] = result
+    return result
+
+
 def _get_market_is_green() -> bool:
     """Quick proxy: NIFTY50 (^NSEI) positive today."""
     try:
@@ -106,6 +134,8 @@ def job_morning_check():
 def job_confirm_momentum():
     """09:30 IST — confirm or cancel deferred MOM_CONT signals from previous EOD."""
     global _pending_momentum_signals
+    if not _is_market_open(ACTIVE_MARKET):
+        return
 
     db = _make_session()
 
@@ -134,6 +164,8 @@ def job_confirm_momentum():
 
 def job_orb_scan():
     """10:00–11:30 IST every 15 min — check for ORB breakout signals."""
+    if not _is_market_open(ACTIVE_MARKET):
+        return
     now = datetime.now(IST)
     if now.hour == 11 and now.minute > 30:
         return  # ORB window closed
@@ -155,6 +187,9 @@ def job_orb_scan():
 
 def job_meanrev_scan():
     """09:00–14:45 IST every 15 min — check for BB_MEANREV intraday signals."""
+    if not _is_market_open(ACTIVE_MARKET):
+        return
+
     db = _make_session()
     snap = get_latest_snapshot(db, ACTIVE_MARKET)
     capital = snap.portfolio_value if snap else STARTING_CAPITAL_INR
@@ -176,6 +211,9 @@ def job_check_exits():
     ORB_BRK/MOM_CONT/BB_MEANREV are also covered here for anything that
     should exit before the hard 15:20 EOD force-exit catches them.
     """
+    if not _is_market_open(ACTIVE_MARKET):
+        return
+
     db = _make_session()
     snap = get_latest_snapshot(db, ACTIVE_MARKET)
     capital = snap.portfolio_value if snap else STARTING_CAPITAL_INR
@@ -193,6 +231,8 @@ def job_check_exits():
 def job_eod_scan():
     """15:00 IST — RSI2_OVN entries + MOM_CONT flags for next day."""
     global _pending_momentum_signals
+    if not _is_market_open(ACTIVE_MARKET):
+        return
 
     db = _make_session()
     snap = get_latest_snapshot(db, ACTIVE_MARKET)
@@ -217,6 +257,9 @@ def job_eod_scan():
 
 def job_eod_exit():
     """15:20 IST — force-close all MOM_CONT and ORB positions (1-day hold only)."""
+    if not _is_market_open(ACTIVE_MARKET):
+        return
+
     db = _make_session()
     snap = get_latest_snapshot(db, ACTIVE_MARKET)
     capital = snap.portfolio_value if snap else STARTING_CAPITAL_INR
@@ -246,6 +289,9 @@ def job_eod_exit():
 
 def job_eod_snapshot():
     """15:30 IST — take EOD portfolio snapshot."""
+    if not _is_market_open(ACTIVE_MARKET):
+        return
+
     db = _make_session()
     snap = get_latest_snapshot(db, ACTIVE_MARKET)
     capital = snap.portfolio_value if snap else STARTING_CAPITAL_INR

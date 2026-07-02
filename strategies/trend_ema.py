@@ -30,6 +30,7 @@ DEFAULT_PARAMS = {
     "atr_period": 14,
     "atr_stop_multiplier": 3.0,     # fixed stop = entry - 3x ATR
     "atr_target_multiplier": 6.0,   # nominal 2:1 R:R for logging purposes
+    "max_hold_days": 60,            # time-stop: release capital if trend stalls
 }
 
 
@@ -114,5 +115,11 @@ class TrendEMAStrategy(BaseStrategy):
         stop_price = trade.get("stop_loss_price")
         if stop_price and current_price <= stop_price:
             return True, "STOP"
+
+        # 3. Time cap — prevents indefinite capital lockup when trend stalls
+        hold_days = trade.get("hold_days", 0)
+        max_hold = self.params.get("max_hold_days")
+        if max_hold and hold_days >= max_hold:
+            return True, "TIME_STOP"
 
         return False, ""

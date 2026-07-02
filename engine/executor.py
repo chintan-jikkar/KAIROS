@@ -20,6 +20,7 @@ from engine.risk import (
     RISK_PARAMS,
     calculate_position_size,
     check_circuit_breakers,
+    check_correlation_risk,
     check_position_limit,
     check_portfolio_heat,
 )
@@ -80,7 +81,12 @@ class Executor:
         if not check_portfolio_heat(self.db, portfolio_value, self.market):
             return {"status": "REJECTED", "reason": "Max portfolio heat reached", "trade_id": None}
 
-        # 6. Position sizing (reduce 50% if VIX elevated)
+        # 6. Correlation cap — block entry if too correlated with any open position
+        corr_ok, corr_reason = check_correlation_risk(self.db, symbol, self.market)
+        if not corr_ok:
+            return {"status": "REJECTED", "reason": corr_reason, "trade_id": None}
+
+        # 7. Position sizing (reduce 50% if VIX elevated)
         risk_pct = RISK_PARAMS["max_risk_per_trade_pct"]
         if status == "REDUCE_50PCT":
             risk_pct *= 0.5
@@ -96,12 +102,12 @@ class Executor:
         if quantity <= 0:
             return {"status": "REJECTED", "reason": "Calculated quantity = 0", "trade_id": None}
 
-        # 7. Place order
+        # 8. Place order
         order = self.broker.buy(symbol, quantity, signal["entry_price"])
         if order["status"] != "FILLED":
             return {"status": "REJECTED", "reason": order.get("reason", "Broker rejected"), "trade_id": None}
 
-        # 8. Cost estimate (buy-side; sell-side added on close)
+        # 9. Cost estimate (buy-side; sell-side added on close)
         buy_costs = calculate_costs(
             self.market,
             buy_price=order["fill_price"],
@@ -110,7 +116,7 @@ class Executor:
             segment=self.segment,
         )
 
-        # 9. Log to DB
+        # 10. Log to DB
         trade = create_trade(
             db=self.db,
             signal=signal,
