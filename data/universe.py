@@ -24,7 +24,7 @@ US_MASTER_POOL = {
     "large_cap_momentum": ["AAPL", "MSFT", "GOOGL", "AMZN", "META"],
     "high_atr_volatile":  ["NVDA", "TSLA", "AMD", "COIN", "PLTR"],
     "defensive_reversal": ["JNJ", "PG", "KO", "PEP", "WMT"],
-    "broad_etf":          ["SPY", "QQQ", "DIA", "IWM"],
+    "broad_etf":          ["QQQ", "DIA", "IWM"],
 }
 
 INDIA_SCREEN_CRITERIA = {

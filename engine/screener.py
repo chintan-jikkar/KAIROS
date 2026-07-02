@@ -174,11 +174,21 @@ def _evaluate_symbol(symbol: str, nifty_returns: list[float] | None = None) -> d
     if atr_pct < c["min_atr_pct_14d"]:
         return None
 
-    # RSI14 filter
-    rsi14 = float(last.get("rsi_14", 50))
-    rsi_lo, rsi_hi = c["rsi14_range"]
-    if not (rsi_lo <= rsi14 <= rsi_hi):
-        return None
+    # RSI14 filter — skipped for MOM_CONT candidates because a stock posting the
+    # required +3% move with 2x volume always has RSI14 > 70 by construction.
+    vol_ratio = float(last.get("vol_ratio_20", 1.0))
+    mom_cont_rules = STRATEGY_ASSIGNMENT_RULES["MOM_CONT"]
+    is_mom_cont_candidate = (
+        atr_pct >= mom_cont_rules["atr_min"]
+        and vol_ratio >= mom_cont_rules["volume_ratio_min"]
+    )
+    if not is_mom_cont_candidate:
+        rsi14 = float(last.get("rsi_14", 50))
+        rsi_lo, rsi_hi = c["rsi14_range"]
+        if not (rsi_lo <= rsi14 <= rsi_hi):
+            return None
+    else:
+        rsi14 = float(last.get("rsi_14", 50))
 
     # Earnings blackout filter — skip if earnings within the configured window
     no_earnings_days = c.get("no_earnings_within_days")
@@ -186,7 +196,6 @@ def _evaluate_symbol(symbol: str, nifty_returns: list[float] | None = None) -> d
         logger.debug(f"Screener skipped {symbol}: earnings within {no_earnings_days} days")
         return None
 
-    vol_ratio = float(last.get("vol_ratio_20", 1.0))
     adx = float(last.get("adx_14")) if last.get("adx_14") is not None else None
 
     closes = df["close"].tolist()
@@ -239,18 +248,26 @@ def _evaluate_symbol_us(symbol: str, spy_returns: list[float]) -> dict | None:
     if atr_pct < c["min_atr_pct_14d"]:
         return None
 
-    rsi14 = float(last.get("rsi_14", 50))
-    rsi_lo, rsi_hi = c["rsi14_range"]
-    if not (rsi_lo <= rsi14 <= rsi_hi):
-        return None
+    # RSI14 filter — skipped for MOM_CONT candidates (same reason as India screener).
+    vol_ratio = float(last.get("vol_ratio_20", 1.0))
+    us_mom_cont_rules = US_STRATEGY_ASSIGNMENT_RULES["MOM_CONT"]
+    is_mom_cont_candidate = (
+        atr_pct >= us_mom_cont_rules["atr_min"]
+        and vol_ratio >= us_mom_cont_rules["volume_ratio_min"]
+    )
+    if not is_mom_cont_candidate:
+        rsi14 = float(last.get("rsi_14", 50))
+        rsi_lo, rsi_hi = c["rsi14_range"]
+        if not (rsi_lo <= rsi14 <= rsi_hi):
+            return None
+    else:
+        rsi14 = float(last.get("rsi_14", 50))
 
     # Earnings blackout filter — skip if earnings within the configured window
     no_earnings_days = c.get("no_earnings_within_days")
     if no_earnings_days and _has_earnings_soon(symbol, no_earnings_days):
         logger.debug(f"US screener skipped {symbol}: earnings within {no_earnings_days} days")
         return None
-
-    vol_ratio = float(last.get("vol_ratio_20", 1.0))
     adx = float(last.get("adx_14")) if last.get("adx_14") is not None else None
 
     closes = df["close"].tolist()

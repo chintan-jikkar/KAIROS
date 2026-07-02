@@ -235,3 +235,33 @@ def test_has_earnings_soon_fails_open_on_api_exception():
 
     with patch("engine.screener.yf.Ticker", side_effect=Exception("network error")):
         assert _has_earnings_soon("RELIANCE.NS", 7) is False
+
+
+# --------------------------------------------------------------------------- #
+# P2 fixes                                                                      #
+# --------------------------------------------------------------------------- #
+
+def test_spy_not_in_us_tradeable_pool():
+    """SPY is the beta benchmark, not a tradeable — it must not appear in get_us_all_symbols()."""
+    from data.universe import get_us_all_symbols
+    assert "SPY" not in get_us_all_symbols()
+
+
+def test_rsi2_ovn_exits_at_next_open_day1():
+    """RSI2_OVN should exit on day 1 via EOD (next-open timing)."""
+    from strategies.rsi2_overnight import RSI2OvernightStrategy
+    strategy = RSI2OvernightStrategy()
+    trade = {"entry_price": 100.0, "stop_loss_price": 96.0, "target_price": 108.0,
+             "direction": "LONG", "hold_days": 1.1, "exit_timing": "next_open"}
+    bar = {"close": 101.0, "rsi_2": 50.0}
+    should_exit, reason = strategy.should_exit(trade, bar)
+    assert should_exit is True
+    assert reason == "EOD"
+
+
+def test_rsi2_ovn_time_stop_removed():
+    """Dead TIME_STOP branch must not exist in should_exit after the fix."""
+    from strategies.rsi2_overnight import RSI2OvernightStrategy
+    import inspect
+    src = inspect.getsource(RSI2OvernightStrategy.should_exit)
+    assert "TIME_STOP" not in src

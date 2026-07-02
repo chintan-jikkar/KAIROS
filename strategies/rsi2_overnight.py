@@ -105,11 +105,7 @@ class RSI2OvernightStrategy(BaseStrategy):
         if loss_pct <= -self.params["stop_loss_pct"]:
             return True, "STOP"
 
-        # 3. Time stop
-        if hold_days >= self.params["max_hold_candles"]:
-            return True, "TIME_STOP"
-
-        # 4. Default: always exit at next open (hold_days >= 1 means we've passed open)
+        # 3. Default: always exit at next open (hold_days >= 1 means we've passed open)
         if trade.get("exit_timing") == "next_open" and hold_days >= 1:
             return True, "EOD"
 
