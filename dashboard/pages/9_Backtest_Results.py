@@ -1,5 +1,6 @@
 """Page 9 — Backtests: browse persisted BacktestRun results (read-only; new backtests
 are still triggered via `python -m engine.backtest`, not from the dashboard)."""
+from datetime import datetime
 from pathlib import Path
 
 import math
@@ -14,7 +15,8 @@ from dashboard.components.ticker_ribbon import render_ticker_ribbon
 from dashboard.components.notifications import check_and_notify
 from dashboard.components.strategy_meta import STRATEGY_NAMES
 from dashboard.db import get_session
-from database.models import BacktestRun
+from dashboard.components.candlestick_chart import render_candlestick_chart
+from database.models import BacktestRun, BacktestTrade
 
 st.set_page_config(page_title="KAIROS · Backtests", page_icon="⚡", layout="wide")
 st.markdown(f"<style>{(Path(__file__).parent.parent / 'style.css').read_text()}</style>", unsafe_allow_html=True)
@@ -151,6 +153,62 @@ def _render_run_detail_dialog(run_id: str, db):
                 """,
                 unsafe_allow_html=True,
             )
+
+    st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
+    st.markdown('<p style="color:var(--text-secondary);font-size:13px;margin-bottom:4px;">Price chart with backtest trades</p>', unsafe_allow_html=True)
+    st.caption(
+        "◆ blue diamond = entry &nbsp;·&nbsp; ✕ green = WIN exit &nbsp;·&nbsp; ✕ red = LOSS exit. "
+        "Select a timeframe that covers the backtest period."
+    )
+
+    # Pick a default timeframe that roughly fits the run's date range.
+    try:
+        days = (datetime.fromisoformat(run.end_date) - datetime.fromisoformat(run.start_date)).days
+    except Exception:
+        days = 365
+    if days > 500:
+        default_tf = "2Y"
+    elif days > 250:
+        default_tf = "1Y"
+    elif days > 120:
+        default_tf = "6M"
+    else:
+        default_tf = "3M"
+
+    render_candlestick_chart(
+        run.symbol, db,
+        market=run.market,
+        key_prefix=f"bt_detail_{run.run_id[:8]}",
+        height=340,
+        show_trades=False,
+        backtest_run_id=run.run_id,
+        default_timeframe=default_tf,
+    )
+
+    bt_trades = (
+        db.query(BacktestTrade)
+        .filter(BacktestTrade.run_id == run.run_id)
+        .order_by(BacktestTrade.entry_date)
+        .all()
+    )
+    if bt_trades:
+        st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+        st.markdown('<p style="color:var(--text-secondary);font-size:13px;margin-bottom:4px;">Individual trades</p>', unsafe_allow_html=True)
+        sym_cur = "$" if run.market == "US" else "₹"
+        trade_rows = []
+        for t in bt_trades:
+            pnl_str = f"{sym_cur}{t.net_pnl:+,.2f}" if t.net_pnl is not None else "–"
+            trade_rows.append({
+                "Entry": t.entry_date[:10] if t.entry_date else "–",
+                "Exit": t.exit_date[:10] if t.exit_date else "open",
+                "Entry px": f"{sym_cur}{t.entry_price:,.2f}" if t.entry_price else "–",
+                "Exit px": f"{sym_cur}{t.exit_price:,.2f}" if t.exit_price else "–",
+                "Net P&L": pnl_str,
+                "Outcome": t.outcome or "–",
+                "Exit reason": t.exit_reason or "–",
+            })
+        import pandas as pd
+        st.dataframe(pd.DataFrame(trade_rows), use_container_width=True, hide_index=True)
 
     if st.button("Close"):
         st.session_state["_selected_backtest_run_id"] = None

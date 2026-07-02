@@ -15,9 +15,11 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
+import pandas as pd
+
 from dashboard.components.equity_curve import KAIROS_CHART_LAYOUT
 from data.market_data import fetch_india_daily, fetch_us_daily
-from database.models import Trade
+from database.models import Trade, BacktestTrade
 
 _PERIODS = {"1M": "1mo", "3M": "3mo", "6M": "6mo", "1Y": "1y", "2Y": "2y"}
 
@@ -40,6 +42,11 @@ def _add_overlay_indicators(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+_BT_ENTRY_COLOR = "#4FC3F7"   # light blue — distinct from live-trade gold (#F0C040)
+_BT_WIN_COLOR   = "#3DDC97"   # same green as live wins, but different marker shape
+_BT_LOSS_COLOR  = "#F0506E"
+
+
 def render_candlestick_chart(
     symbol: str,
     db,
@@ -47,14 +54,17 @@ def render_candlestick_chart(
     key_prefix: str = "chart",
     height: int = 320,
     show_trades: bool = True,
+    backtest_run_id: str | None = None,
+    default_timeframe: str = "1Y",
 ):
     """Drop-in candlestick+volume chart for a symbol. Call from any page; pass a
     different key_prefix for each simultaneous call site on the same page (e.g.
     inline drill-down vs. fullscreen dialog) to avoid widget key collisions."""
+    default_tf_index = list(_PERIODS.keys()).index(default_timeframe) if default_timeframe in _PERIODS else 3
     ctrl_tf, ctrl_ind = st.columns([1, 3])
     with ctrl_tf:
         timeframe = st.selectbox(
-            "Timeframe", list(_PERIODS.keys()), index=1,
+            "Timeframe", list(_PERIODS.keys()), index=default_tf_index,
             key=f"{key_prefix}_tf_{symbol}", label_visibility="collapsed",
         )
     with ctrl_ind:
@@ -133,6 +143,52 @@ def render_candlestick_chart(
                 marker=dict(symbol="triangle-down", size=11, color=exit_colors,
                             line=dict(width=1, color="#0A0A0A")),
                 showlegend=False, hovertemplate=f"Exit {currency_sym}%{{y:,.2f}}<extra></extra>",
+            ), row=1, col=1)
+
+    if backtest_run_id is not None:
+        bt_trades = (
+            db.query(BacktestTrade)
+            .filter(BacktestTrade.run_id == backtest_run_id)
+            .all()
+        )
+        bt_entries_x, bt_entries_y, bt_entry_tips = [], [], []
+        bt_exits_x, bt_exits_y, bt_exit_colors, bt_exit_tips = [], [], [], []
+        for t in bt_trades:
+            if t.entry_date and t.entry_price is not None:
+                bt_entries_x.append(pd.to_datetime(t.entry_date))
+                bt_entries_y.append(t.entry_price)
+                bt_entry_tips.append(
+                    f"BT Entry {currency_sym}{t.entry_price:,.2f}"
+                    f"<br>{t.strategy_id} · {t.entry_date[:10]}"
+                )
+            if t.exit_date and t.exit_price is not None:
+                bt_exits_x.append(pd.to_datetime(t.exit_date))
+                bt_exits_y.append(t.exit_price)
+                bt_exit_colors.append(_BT_WIN_COLOR if t.outcome == "WIN" else _BT_LOSS_COLOR)
+                pnl_str = f"{currency_sym}{t.net_pnl:+,.2f}" if t.net_pnl is not None else "–"
+                bt_exit_tips.append(
+                    f"BT Exit {currency_sym}{t.exit_price:,.2f}"
+                    f"<br>{t.exit_reason or '–'} · P&L {pnl_str}"
+                )
+        if bt_entries_x:
+            fig.add_trace(go.Scatter(
+                x=bt_entries_x, y=bt_entries_y, mode="markers",
+                name="BT Entry",
+                marker=dict(symbol="diamond", size=9, color=_BT_ENTRY_COLOR,
+                            line=dict(width=1, color="#0A0A0A")),
+                showlegend=False,
+                customdata=bt_entry_tips,
+                hovertemplate="%{customdata}<extra></extra>",
+            ), row=1, col=1)
+        if bt_exits_x:
+            fig.add_trace(go.Scatter(
+                x=bt_exits_x, y=bt_exits_y, mode="markers",
+                name="BT Exit",
+                marker=dict(symbol="x", size=9, color=bt_exit_colors,
+                            line=dict(width=2, color=bt_exit_colors)),
+                showlegend=False,
+                customdata=bt_exit_tips,
+                hovertemplate="%{customdata}<extra></extra>",
             ), row=1, col=1)
 
     fig.update_layout(
