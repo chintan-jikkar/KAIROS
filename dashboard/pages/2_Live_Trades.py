@@ -16,6 +16,7 @@ from dashboard.components.ticker_ribbon import render_ticker_ribbon
 from dashboard.components.notifications import check_and_notify
 from database.models import Trade, Signal
 from database.trade_log import get_open_trades
+from dashboard.components.manual_trade import render_close_position_button, _close_position_dialog
 
 st.set_page_config(page_title="KAIROS · Live Trades", page_icon="⚡", layout="wide")
 st.markdown(f"<style>{(Path(__file__).parent.parent / 'style.css').read_text()}</style>", unsafe_allow_html=True)
@@ -118,17 +119,37 @@ with right_col:
     if not open_trades:
         st.info("No open positions right now.")
     else:
-        rows = []
         for t in open_trades:
-            rows.append({
-                "Symbol": t.symbol,
-                "Dir": t.direction,
-                "Strategy": t.strategy_id,
-                "Entry": f"{sym}{t.entry_price:.2f}",
-                "Stop": f"{sym}{t.stop_loss_price:.2f}" if t.stop_loss_price else "–",
-                "Target": f"{sym}{t.target_price:.2f}" if t.target_price else "–",
-            })
-        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+            t_sym = "$" if t.market == "US" else "₹"
+            stop_txt = f"{t_sym}{t.stop_loss_price:.2f}" if t.stop_loss_price else "–"
+            target_txt = f"{t_sym}{t.target_price:.2f}" if t.target_price else "–"
+            with st.container(border=True):
+                h1, h2 = st.columns([3, 1])
+                with h1:
+                    st.markdown(
+                        f'<div style="display:flex;align-items:center;gap:10px;">'
+                        f'<span style="font-size:14px;font-weight:600;">{t.symbol}</span>'
+                        f'<span class="badge badge-direction-long" style="font-size:10px;">{t.direction}</span>'
+                        f'<span style="font-size:11px;color:var(--text-muted);">{t.strategy_id}</span>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+                with h2:
+                    render_close_position_button(t)
+
+                mc1, mc2, mc3, mc4 = st.columns(4)
+                with mc1:
+                    st.markdown(f'<p class="kpi-label">Entry</p><p class="kairos-mono">{t_sym}{t.entry_price:,.2f}</p>', unsafe_allow_html=True)
+                with mc2:
+                    st.markdown(f'<p class="kpi-label">Stop</p><p class="kairos-mono">{stop_txt}</p>', unsafe_allow_html=True)
+                with mc3:
+                    st.markdown(f'<p class="kpi-label">Target</p><p class="kairos-mono">{target_txt}</p>', unsafe_allow_html=True)
+                with mc4:
+                    st.markdown(f'<p class="kpi-label">Qty</p><p class="kairos-mono">{t.quantity:.0f}</p>', unsafe_allow_html=True)
+
+    close_trade_id = st.session_state.get("_close_trade_id")
+    if close_trade_id and any(t.trade_id == close_trade_id for t in open_trades):
+        _close_position_dialog(close_trade_id)
 
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
     st.markdown('<p style="color:var(--text-secondary);font-size:13px;margin-bottom:8px;">Recent signals</p>', unsafe_allow_html=True)

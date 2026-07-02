@@ -1,16 +1,20 @@
 """
-Manual 'try this stock on paper before deploying a strategy' action.
-Usable from the Markets and Strategies pages. Always routes through the same
-Executor/PaperBroker path real signals use, so position sizing, risk checks,
-and cost calculation are identical — it's a real (simulated) order, not a toy.
+Manual paper trade actions — open and close.
+Usable from the Markets, Strategies, and Live Trades pages. Always routes
+through the same Executor/PaperBroker path real signals use, so position
+sizing, risk checks, and cost calculation are identical.
 """
+from datetime import datetime
+
 import streamlit as st
 
 from dashboard.db import get_session
 from dashboard.components.strategy_meta import STRATEGY_NAMES
 from brokers.paper import PaperBroker
 from engine.executor import Executor
+from engine.costs import calculate_costs
 from database.portfolio import get_latest_snapshot
+from database.models import Trade as TradeModel
 from config.settings import STARTING_CAPITAL_INR
 
 
@@ -118,3 +122,97 @@ def render_manual_paper_trade_button(
                 st.error("Entry, stop, and target must all be greater than zero.")
             else:
                 _confirm_and_place(symbol, market, direction, entry, stop, target, strategy_id)
+
+
+# ── Manual close ──────────────────────────────────────────────────────────────
+
+@st.dialog("Close position")
+def _close_position_dialog(trade_id: str):
+    db = get_session()
+    trade = (
+        db.query(TradeModel)
+        .filter(TradeModel.trade_id == trade_id, TradeModel.timestamp_exit.is_(None))
+        .first()
+    )
+    if trade is None:
+        st.error("Trade not found or already closed.")
+        if st.button("OK"):
+            st.session_state.pop("_close_trade_id", None)
+            st.rerun()
+        return
+
+    sym = "$" if trade.market == "US" else "₹"
+    days_held = max(0, (datetime.utcnow() - trade.timestamp_entry).days)
+
+    st.markdown(
+        f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">'
+        f'<span style="font-size:16px;font-weight:600;">{trade.symbol}</span>'
+        f'<span style="font-size:12px;color:var(--text-secondary);">{trade.direction} · {trade.strategy_id}</span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    mc1, mc2, mc3 = st.columns(3)
+    with mc1:
+        st.metric("Entry", f"{sym}{trade.entry_price:,.2f}")
+    with mc2:
+        st.metric("Qty", f"{trade.quantity:.0f}")
+    with mc3:
+        st.metric("Days held", days_held)
+
+    exit_price = st.number_input(
+        "Exit price",
+        value=float(trade.entry_price),
+        min_value=0.01,
+        step=0.01,
+        key="_close_exit_price",
+        help="Enter the price you're exiting at. Costs are applied automatically.",
+    )
+
+    if exit_price > 0:
+        costs = calculate_costs(
+            trade.market, trade.entry_price, exit_price,
+            trade.quantity, "equity_intraday",
+        )
+        gross = (exit_price - trade.entry_price) * float(trade.quantity)
+        if trade.direction == "SHORT":
+            gross = -gross
+        net = gross - costs["total_cost"]
+        pnl_class = "positive" if net >= 0 else "negative"
+        st.markdown(
+            f'<p style="font-size:12px;color:var(--text-muted);margin-top:8px;">Estimated P&amp;L</p>'
+            f'<p class="kairos-mono {pnl_class}" style="font-size:18px;margin:2px 0;">{sym}{net:+,.2f}</p>'
+            f'<p style="font-size:11px;color:var(--text-muted);">Costs: {sym}{costs["total_cost"]:,.2f} &nbsp;·&nbsp; '
+            f'Gross: {sym}{gross:+,.2f}</p>',
+            unsafe_allow_html=True,
+        )
+
+    st.caption("Exit reason will be recorded as MANUAL — no real money moves.")
+    cc1, cc2 = st.columns(2)
+    with cc1:
+        if st.button("Confirm close", type="primary", use_container_width=True, key="_close_confirm"):
+            snap = get_latest_snapshot(db, trade.market)
+            capital = snap.portfolio_value if snap else STARTING_CAPITAL_INR
+            broker = PaperBroker(db, capital)
+            executor = Executor(
+                db=db, broker=broker, market=trade.market,
+                execution_mode="PAPER", segment="equity_intraday",
+            )
+            result = executor.execute_exit(trade.symbol, exit_price, "MANUAL")
+            if result["status"] == "FILLED":
+                st.success(f"Closed — trade {result['trade_id']} settled. Check Logbook for the record.")
+            else:
+                st.error(f"Failed: {result['reason']}")
+            st.session_state.pop("_close_trade_id", None)
+            st.rerun()
+    with cc2:
+        if st.button("Cancel", use_container_width=True, key="_close_cancel"):
+            st.session_state.pop("_close_trade_id", None)
+            st.rerun()
+
+
+def render_close_position_button(trade, key_suffix: str = ""):
+    """'Close manually' button for a single open trade. Call from the Live Trades page."""
+    key = f"close_{trade.trade_id}" + (f"_{key_suffix}" if key_suffix else "")
+    if st.button("Close manually", key=key, use_container_width=True):
+        st.session_state["_close_trade_id"] = trade.trade_id
