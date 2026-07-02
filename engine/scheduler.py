@@ -1,8 +1,9 @@
 """
-APScheduler job definitions — all times in IST (Asia/Kolkata).
+APScheduler job definitions — dual-market (India NSE / US NYSE).
 Run this as the main algo process: python engine/scheduler.py
+Set ACTIVE_MARKET=US in env to switch to NYSE Eastern-Time schedule.
 
-Jobs:
+India (IST, Asia/Kolkata) schedule:
   09:00 IST Mon–Fri  — morning health check
   09:00–14:45 IST    — BB_MEANREV scan every 15 min
   09:20 IST Mon–Fri  — strategy-driven exit check (RSI2_OVN, TREND_EMA, etc.)
@@ -13,6 +14,18 @@ Jobs:
   15:20 IST Mon–Fri  — force-exit all open MOM_CONT + ORB_BRK + BB_MEANREV positions
   15:30 IST Mon–Fri  — take portfolio snapshot
   Sunday 20:00 IST   — run weekly screener, refresh universe
+
+US (ET, America/New_York) schedule:
+  09:30 ET  Mon–Fri  — morning health check (NYSE open)
+  09:35 ET  Mon–Fri  — strategy-driven exit check
+  09:45 ET  Mon–Fri  — confirm MOM_CONT deferred signals from previous EOD
+  10:00–11:30 ET     — ORB scan every 15 min
+  09:30–15:45 ET     — BB_MEANREV scan every 15 min
+  15:30 ET  Mon–Fri  — EOD entry scan (RSI2_OVN, MOM_CONT flags, TREND_EMA)
+  15:45 ET  Mon–Fri  — strategy-driven exit check (second pass)
+  15:50 ET  Mon–Fri  — force-exit all open MOM_CONT + ORB_BRK + BB_MEANREV positions
+  16:00 ET  Mon–Fri  — take portfolio snapshot
+  Sunday 18:00 ET    — run weekly screener, refresh universe
 """
 from __future__ import annotations
 
@@ -32,18 +45,20 @@ from config.settings import (
     DB_PATH, LOG_PATH, LOG_LEVEL,
     STARTING_CAPITAL_INR, ACTIVE_MARKET, EXECUTION_MODE,
 )
-from data.market_data import fetch_india_daily
+from data.market_data import fetch_india_daily, fetch_us_daily
 from database.models import Base
 from database.portfolio import get_latest_snapshot
 from database.trade_log import save_pending_signal, load_pending_signals, clear_pending_signals
 from engine.executor import Executor
-from engine.screener import run_india_screener
+from engine.screener import run_india_screener, run_us_screener
 from engine.signals import (
     run_eod_scan, run_orb_scan, run_meanrev_scan,
     confirm_momentum_entries, check_exits_for_open_trades,
 )
 
 IST = pytz.timezone("Asia/Kolkata")
+ET = pytz.timezone("America/New_York")
+TZ = ET if ACTIVE_MARKET == "US" else IST
 
 # Global state (persists between ticks within a process run)
 _pending_momentum_signals: list[dict] = []
@@ -75,7 +90,7 @@ def _is_market_open(market: str = "INDIA") -> bool:
     Result is cached per market per calendar day so every job in the same process day
     shares a single yfinance call. Fails open on any fetch error."""
     from data.market_data import fetch_india_intraday, fetch_us_intraday
-    today = datetime.now(IST).strftime("%Y-%m-%d")
+    today = datetime.now(TZ).strftime("%Y-%m-%d")
     cache_key = f"{market}:{today}"
     if cache_key in _market_open_cache:
         return _market_open_cache[cache_key]
@@ -96,23 +111,28 @@ def _is_market_open(market: str = "INDIA") -> bool:
 
 
 def _get_market_is_green() -> bool:
-    """Quick proxy: NIFTY50 (^NSEI) positive today."""
+    """Quick proxy: NIFTY50 (India) or SPY (US) positive today vs yesterday."""
     try:
-        from data.market_data import fetch_india_intraday
-        df = fetch_india_intraday("^NSEI", interval="1d", period="2d")
+        if ACTIVE_MARKET == "US":
+            df = fetch_us_daily("SPY", period="5d")
+        else:
+            from data.market_data import fetch_india_intraday
+            df = fetch_india_intraday("^NSEI", interval="1d", period="2d")
         if len(df) >= 2:
             return float(df["close"].iloc[-1]) > float(df["close"].iloc[-2])
     except Exception as exc:
-        logger.warning(f"Could not fetch NIFTY for market filter: {exc}")
+        logger.warning(f"Could not fetch benchmark for market filter: {exc}")
     return True  # default to green if fetch fails (conservative)
 
 
 def _get_current_prices(universe: list[dict]) -> dict:
+    from data.market_data import fetch_india_intraday, fetch_us_intraday
+    fetch_intra = fetch_us_intraday if ACTIVE_MARKET == "US" else fetch_india_intraday
     prices = {}
     for stock in universe:
         sym = stock["symbol"]
         try:
-            df = fetch_india_intraday(sym, interval="1m", period="1d")
+            df = fetch_intra(sym, interval="1m", period="1d")
             if not df.empty:
                 prices[sym] = float(df["close"].iloc[-1])
         except Exception:
@@ -166,7 +186,7 @@ def job_orb_scan():
     """10:00–11:30 IST every 15 min — check for ORB breakout signals."""
     if not _is_market_open(ACTIVE_MARKET):
         return
-    now = datetime.now(IST)
+    now = datetime.now(TZ)
     if now.hour == 11 and now.minute > 30:
         return  # ORB window closed
 
@@ -304,14 +324,13 @@ def job_eod_snapshot():
 
 
 def job_weekly_screener():
-    """Sunday 20:00 IST — refresh universe, re-assign strategies."""
+    """Sunday evening — refresh universe, re-assign strategies."""
     global _active_universe
-    logger.info("=== KAIROS WEEKLY SCREENER RUNNING ===")
-    results = run_india_screener(top_n=6)
+    logger.info(f"=== KAIROS WEEKLY SCREENER RUNNING ({ACTIVE_MARKET}) ===")
+    results = run_us_screener(top_n=6) if ACTIVE_MARKET == "US" else run_india_screener(top_n=6)
     _active_universe = results
     logger.info(f"Universe updated: {[s['symbol'] for s in _active_universe]}")
 
-    # Persist to config for restarts
     cache_path = Path("config/universe_cache.json")
     cache_path.write_text(json.dumps(_active_universe, indent=2))
 
@@ -332,53 +351,72 @@ def _load_cached_universe():
         job_weekly_screener()
 
 
+def _register_india_schedule(scheduler: BlockingScheduler) -> None:
+    """Register all NSE/India jobs in IST timezone."""
+    scheduler.add_job(job_morning_check, CronTrigger(
+        hour=9, minute=0, day_of_week="mon-fri", timezone=IST))
+    scheduler.add_job(job_check_exits, CronTrigger(
+        hour=9, minute=20, day_of_week="mon-fri", timezone=IST))
+    scheduler.add_job(job_confirm_momentum, CronTrigger(
+        hour=9, minute=30, day_of_week="mon-fri", timezone=IST))
+    scheduler.add_job(job_orb_scan, CronTrigger(
+        hour="10,11", minute="0,15,30,45", day_of_week="mon-fri", timezone=IST))
+    scheduler.add_job(job_meanrev_scan, CronTrigger(
+        hour="9,10,11,12,13,14", minute="0,15,30,45", day_of_week="mon-fri", timezone=IST))
+    scheduler.add_job(job_eod_scan, CronTrigger(
+        hour=15, minute=0, day_of_week="mon-fri", timezone=IST))
+    scheduler.add_job(job_check_exits, CronTrigger(
+        hour=15, minute=15, day_of_week="mon-fri", timezone=IST))
+    scheduler.add_job(job_eod_exit, CronTrigger(
+        hour=15, minute=20, day_of_week="mon-fri", timezone=IST))
+    scheduler.add_job(job_eod_snapshot, CronTrigger(
+        hour=15, minute=30, day_of_week="mon-fri", timezone=IST))
+    scheduler.add_job(job_weekly_screener, CronTrigger(
+        hour=20, minute=0, day_of_week="sun", timezone=IST))
+    logger.info("India (NSE/IST) schedule registered.")
+
+
+def _register_us_schedule(scheduler: BlockingScheduler) -> None:
+    """Register all NYSE/US jobs in ET timezone."""
+    scheduler.add_job(job_morning_check, CronTrigger(
+        hour=9, minute=30, day_of_week="mon-fri", timezone=ET))
+    scheduler.add_job(job_check_exits, CronTrigger(
+        hour=9, minute=35, day_of_week="mon-fri", timezone=ET))
+    scheduler.add_job(job_confirm_momentum, CronTrigger(
+        hour=9, minute=45, day_of_week="mon-fri", timezone=ET))
+    # ORB window: 10:00–11:30 ET (first 2 hrs of session mirror India pattern)
+    scheduler.add_job(job_orb_scan, CronTrigger(
+        hour="10,11", minute="0,15,30,45", day_of_week="mon-fri", timezone=ET))
+    # BB_MEANREV: 09:30–15:45 ET full session
+    scheduler.add_job(job_meanrev_scan, CronTrigger(
+        hour="9,10,11,12,13,14,15", minute="30,45,0,15", day_of_week="mon-fri", timezone=ET))
+    scheduler.add_job(job_eod_scan, CronTrigger(
+        hour=15, minute=30, day_of_week="mon-fri", timezone=ET))
+    scheduler.add_job(job_check_exits, CronTrigger(
+        hour=15, minute=45, day_of_week="mon-fri", timezone=ET))
+    scheduler.add_job(job_eod_exit, CronTrigger(
+        hour=15, minute=50, day_of_week="mon-fri", timezone=ET))
+    scheduler.add_job(job_eod_snapshot, CronTrigger(
+        hour=16, minute=0, day_of_week="mon-fri", timezone=ET))
+    scheduler.add_job(job_weekly_screener, CronTrigger(
+        hour=18, minute=0, day_of_week="sun", timezone=ET))
+    logger.info("US (NYSE/ET) schedule registered.")
+
+
 def main():
     from loguru import logger as _logger
     _logger.add(LOG_PATH, level=LOG_LEVEL, rotation="1 week")
 
     _load_cached_universe()
 
-    scheduler = BlockingScheduler(timezone=IST)
+    scheduler = BlockingScheduler(timezone=TZ)
 
-    # Morning check
-    scheduler.add_job(job_morning_check, CronTrigger(
-        hour=9, minute=0, day_of_week="mon-fri", timezone=IST))
+    if ACTIVE_MARKET == "US":
+        _register_us_schedule(scheduler)
+    else:
+        _register_india_schedule(scheduler)
 
-    # MOM_CONT gap confirmation
-    scheduler.add_job(job_confirm_momentum, CronTrigger(
-        hour=9, minute=30, day_of_week="mon-fri", timezone=IST))
-
-    # ORB scan every 15 min from 10:00 to 11:30 IST
-    scheduler.add_job(job_orb_scan, CronTrigger(
-        hour="10,11", minute="0,15,30,45", day_of_week="mon-fri", timezone=IST))
-
-    # BB_MEANREV scan every 15 min from 09:45 to 15:00 IST
-    scheduler.add_job(job_meanrev_scan, CronTrigger(
-        hour="9,10,11,12,13,14", minute="0,15,30,45", day_of_week="mon-fri", timezone=IST))
-
-    # Strategy-driven exit check (RSI2_OVN next-open exit timing + TREND_EMA daily check)
-    scheduler.add_job(job_check_exits, CronTrigger(
-        hour=9, minute=20, day_of_week="mon-fri", timezone=IST))
-    scheduler.add_job(job_check_exits, CronTrigger(
-        hour=15, minute=15, day_of_week="mon-fri", timezone=IST))
-
-    # EOD entry scan
-    scheduler.add_job(job_eod_scan, CronTrigger(
-        hour=15, minute=0, day_of_week="mon-fri", timezone=IST))
-
-    # EOD force-exit
-    scheduler.add_job(job_eod_exit, CronTrigger(
-        hour=15, minute=20, day_of_week="mon-fri", timezone=IST))
-
-    # EOD snapshot
-    scheduler.add_job(job_eod_snapshot, CronTrigger(
-        hour=15, minute=30, day_of_week="mon-fri", timezone=IST))
-
-    # Weekly screener
-    scheduler.add_job(job_weekly_screener, CronTrigger(
-        hour=20, minute=0, day_of_week="sun", timezone=IST))
-
-    logger.info("KAIROS scheduler started. Press Ctrl+C to stop.")
+    logger.info(f"KAIROS scheduler started [{ACTIVE_MARKET}]. Press Ctrl+C to stop.")
     try:
         scheduler.start()
     except (KeyboardInterrupt, SystemExit):

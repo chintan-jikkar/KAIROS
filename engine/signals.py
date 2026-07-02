@@ -98,7 +98,7 @@ def run_orb_scan(
     market_is_green: bool = True,
 ) -> list[dict]:
     """
-    Intraday scan for ORB signals (called every 15 min after 10:00 IST).
+    Intraday scan for ORB signals (called every 15 min after market open).
     Fetches today's 15-min bars and checks for ORB breakout.
     """
     actionable: list[dict] = []
@@ -109,15 +109,16 @@ def run_orb_scan(
         return []
 
     orb_symbols = [s["symbol"] for s in universe if s.get("assigned_strategy") == "ORB_BRK"]
+    fetch_intra = fetch_india_intraday if market == "INDIA" else fetch_us_intraday
+    fetch_daily = fetch_india_daily if market == "INDIA" else fetch_us_daily
 
     for symbol in orb_symbols:
         try:
-            df_intra = fetch_india_intraday(symbol, interval="15m", period="1d")
+            df_intra = fetch_intra(symbol, interval="15m", period="1d")
             if df_intra.empty:
                 continue
 
-            # Add volume baseline (20-day) from daily data
-            df_daily = fetch_india_daily(symbol, period="1mo")
+            df_daily = fetch_daily(symbol, period="1mo")
             if not df_daily.empty:
                 vol_sma_20 = df_daily["volume"].tail(20).mean()
                 df_intra["vol_sma_20"] = vol_sma_20
@@ -151,10 +152,11 @@ def run_meanrev_scan(
     strategy = BBMeanReversionStrategy()
 
     meanrev_symbols = [s["symbol"] for s in universe if s.get("assigned_strategy") == "BB_MEANREV"]
+    fetch_intra = fetch_india_intraday if market == "INDIA" else fetch_us_intraday
 
     for symbol in meanrev_symbols:
         try:
-            df_intra = fetch_india_intraday(symbol, interval="15m", period="1d")
+            df_intra = fetch_intra(symbol, interval="15m", period="1d")
             if df_intra.empty or len(df_intra) < strategy.params["bb_period"]:
                 continue
 
@@ -264,8 +266,8 @@ def confirm_momentum_entries(
 
         symbol = signal["symbol"]
         try:
-            # Get current open price from intraday 1-min bar
-            df_open = fetch_india_intraday(symbol, interval="1m", period="1d")
+            fetch_intra = fetch_india_intraday if market == "INDIA" else fetch_us_intraday
+            df_open = fetch_intra(symbol, interval="1m", period="1d")
             if df_open.empty:
                 continue
             open_price = float(df_open.iloc[0]["open"])
