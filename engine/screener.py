@@ -42,12 +42,25 @@ def run_india_screener(top_n: int | None = 6) -> list[dict]:
     top_n caps the result (used to pick the active trading universe);
     pass None to return every qualifying stock (used for browsing in the Markets page).
     """
+    # Fetch NIFTY50 once for beta computation across all symbols.
+    # ^NSEI is yfinance's ticker for the index; fetch_us_daily passes it unchanged (no .NS suffix).
+    nifty_df = fetch_us_daily("^NSEI", period="3mo")
+    if not nifty_df.empty and len(nifty_df) >= 2:
+        nifty_closes = nifty_df["close"].tolist()
+        nifty_returns = [
+            (nifty_closes[i] - nifty_closes[i - 1]) / nifty_closes[i - 1]
+            for i in range(1, len(nifty_closes))
+        ]
+    else:
+        logger.warning("Could not fetch ^NSEI data — India beta will default to 1.0")
+        nifty_returns = []
+
     symbols = get_india_all_symbols()
     results = []
 
     for symbol in symbols:
         try:
-            record = _evaluate_symbol(symbol)
+            record = _evaluate_symbol(symbol, nifty_returns)
             if record:
                 results.append(record)
         except Exception as exc:
@@ -115,7 +128,7 @@ def run_us_screener(top_n: int | None = 6) -> list[dict]:
     return ranked
 
 
-def _evaluate_symbol(symbol: str) -> dict | None:
+def _evaluate_symbol(symbol: str, nifty_returns: list[float] | None = None) -> dict | None:
     c = INDIA_SCREEN_CRITERIA
 
     df = fetch_india_daily(symbol, period="3mo")
@@ -149,9 +162,9 @@ def _evaluate_symbol(symbol: str) -> dict | None:
     vol_ratio = float(last.get("vol_ratio_20", 1.0))
     adx = float(last.get("adx_14")) if last.get("adx_14") is not None else None
 
-    # Beta is not available via yfinance easily — approximate from 90-day correlation with NIFTY
-    # For now default to 1.0; will be populated when live Kite data is available
-    beta = 1.0
+    closes = df["close"].tolist()
+    symbol_returns = [(closes[i] - closes[i - 1]) / closes[i - 1] for i in range(1, len(closes))]
+    beta = _compute_beta_vs_spy(symbol_returns, nifty_returns or [])
 
     strategy_id = _assign_strategy(atr_pct=atr_pct, beta=beta, vol_ratio=vol_ratio, adx=adx)
 

@@ -54,9 +54,7 @@ US_SCREEN_CRITERIA = {
 # DONCHIAN_BRK takes the ADX 20-25 gap between BB_MEANREV's and TREND_EMA's bands.
 STRATEGY_ASSIGNMENT_RULES = {
     "RSI2_OVN":     {"beta_max": 1.3, "atr_max": 3.0},
-    "ORB_BRK":      {"atr_min": 2.5, "beta_min": 0.95},  # beta is a 1.0 placeholder until live
-                                                           # Kite beta is wired up (Phase 6) — 0.95
-                                                           # keeps this reachable until then, was 1.1
+    "ORB_BRK":      {"atr_min": 2.5, "beta_min": 0.95},
     "MOM_CONT":     {"atr_min": 3.0, "volume_ratio_min": 1.5},
     "SUPERTREND":   {"adx_min": 25, "atr_min": 2.5},
     "TREND_EMA":    {"adx_min": 25, "atr_max": 2.5},

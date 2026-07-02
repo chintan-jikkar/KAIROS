@@ -143,3 +143,40 @@ def test_assign_strategy_us_bb_meanrev_below_orb_beta():
     result = _assign_strategy(atr_pct=3.0, beta=1.49, vol_ratio=0.7, adx=18.0,
                               rules=US_STRATEGY_ASSIGNMENT_RULES)
     assert result == "BB_MEANREV"
+
+
+# ---------------------------------------------------------------------------
+# India real-beta cascade tests — Task 14
+# Previously beta was hardcoded to 1.0, so every stock with ATR≥2.5 got
+# ORB_BRK (1.0 ≥ beta_min=0.95). Real NIFTY50 beta now drives differentiation.
+# ---------------------------------------------------------------------------
+
+def test_india_real_beta_high_beta_orb_brk():
+    """TATAMOTORS-like: beta=1.4, ATR=2.6% → ORB_BRK.
+    High-beta cyclical correctly routes to opening-range strategy."""
+    from engine.screener import _assign_strategy
+    from data.universe import STRATEGY_ASSIGNMENT_RULES
+    result = _assign_strategy(atr_pct=2.6, beta=1.4, vol_ratio=1.0, adx=22.0,
+                              rules=STRATEGY_ASSIGNMENT_RULES)
+    assert result == "ORB_BRK"
+
+
+def test_india_real_beta_low_beta_falls_past_orb():
+    """HINDUNILVR-like: beta=0.3 (defensive FMCG), ATR=2.6%, ADX=18 → BB_MEANREV.
+    With hardcoded beta=1.0 this would have been ORB_BRK — real beta fixes it."""
+    from engine.screener import _assign_strategy
+    from data.universe import STRATEGY_ASSIGNMENT_RULES
+    result = _assign_strategy(atr_pct=2.6, beta=0.3, vol_ratio=1.0, adx=18.0,
+                              rules=STRATEGY_ASSIGNMENT_RULES)
+    assert result == "BB_MEANREV"
+
+
+def test_india_real_beta_below_orb_threshold_bb_meanrev():
+    """beta=0.8 (just below ORB_BRK beta_min=0.95), ATR=2.6% (meets atr_min=2.5), ADX=18 → BB_MEANREV.
+    ORB_BRK fails because of beta alone (ATR passes). Falls to BB_MEANREV (ADX≤20, ATR≥1.5).
+    With old hardcoded beta=1.0 this same stock would have landed ORB_BRK."""
+    from engine.screener import _assign_strategy
+    from data.universe import STRATEGY_ASSIGNMENT_RULES
+    result = _assign_strategy(atr_pct=2.6, beta=0.8, vol_ratio=0.9, adx=18.0,
+                              rules=STRATEGY_ASSIGNMENT_RULES)
+    assert result == "BB_MEANREV"
