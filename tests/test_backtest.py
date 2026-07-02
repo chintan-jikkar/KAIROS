@@ -248,8 +248,27 @@ def _build_synthetic_ohlcv(n_bars: int = 60, overrides: dict | None = None) -> p
 
 
 def _add_indicators(df: pd.DataFrame) -> pd.DataFrame:
+    """Apply all strategy indicators to df, then overwrite ATR with a pure-pandas
+    Wilder smoothed ATR so the backtest tests are not broken by the pandas_ta stub
+    in conftest.py.  pandas_ta is stubbed globally (to avoid the native C extension
+    requirement in CI), but ta.atr() returns a MagicMock that pandas coerces to NaN,
+    causing _get() to return None for ATR and silencing every DONCHIAN_BRK signal.
+    All other indicators needed by DONCHIAN_BRK (donchian_upper/lower) are pure pandas
+    inside add_donchian() and are unaffected."""
     from data.indicators import add_all_strategy_indicators
-    return add_all_strategy_indicators(df.copy())
+    df = add_all_strategy_indicators(df.copy())
+
+    # Wilder's ATR — identical to what pandas_ta would produce
+    period = 14
+    high, low, close = df["high"], df["low"], df["close"]
+    tr = pd.concat([
+        high - low,
+        (high - close.shift(1)).abs(),
+        (low - close.shift(1)).abs(),
+    ], axis=1).max(axis=1)
+    df["atr_14"] = tr.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
+    df["atr_pct_14"] = (df["atr_14"] / df["close"]) * 100
+    return df
 
 
 def test_simulate_no_lookahead():
