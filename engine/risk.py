@@ -44,11 +44,12 @@ def calculate_position_size(
     entry_price: float,
     stop_price: float,
     risk_pct: float = RISK_PARAMS["max_risk_per_trade_pct"],
+    market: str = "INDIA",
 ) -> float:
     """
     Fixed-fractional position sizing: risk exactly risk_pct of portfolio on each trade.
     Capped at 25% of portfolio in a single position.
-    Returns quantity (fractional shares supported).
+    NSE requires whole shares; US (Alpaca) supports fractional shares.
     """
     risk_per_unit = abs(entry_price - stop_price)
     if risk_per_unit == 0:
@@ -64,6 +65,9 @@ def calculate_position_size(
         logger.debug(f"Position capped at 25% limit: {units:.2f} → {max_units:.2f} units")
         units = max_units
 
+    # NSE requires whole shares; US (Alpaca) supports fractional
+    if market == "INDIA":
+        return float(int(units))
     return round(units, 4)
 
 
@@ -85,14 +89,14 @@ def check_circuit_breakers(
         return "HALT", msg
 
     # 2. Daily loss limit
-    today_pnl_pct = _get_today_pnl_pct(db, portfolio_value)
+    today_pnl_pct = _get_today_pnl_pct(db, portfolio_value, market)
     if today_pnl_pct <= -RISK_PARAMS["daily_loss_limit_pct"]:
         msg = f"Daily loss limit hit: {today_pnl_pct:.1%}. Halting new entries today."
         logger.warning(msg)
         return "HALT", msg
 
     # 3. Weekly loss limit
-    week_pnl_pct = _get_week_pnl_pct(db, portfolio_value)
+    week_pnl_pct = _get_week_pnl_pct(db, portfolio_value, market)
     if week_pnl_pct <= -RISK_PARAMS["weekly_loss_limit_pct"]:
         msg = f"Weekly loss limit hit: {week_pnl_pct:.1%}. Halting new entries this week."
         logger.warning(msg)
@@ -115,17 +119,21 @@ def check_circuit_breakers(
     return "NORMAL", "All systems operational."
 
 
-def check_position_limit(db: Session) -> bool:
+def check_position_limit(db: Session, market: str = "INDIA") -> bool:
     """Returns True if we can open a new position (under max concurrent positions)."""
     open_count = db.query(func.count(Trade.trade_id)).filter(
-        Trade.timestamp_exit.is_(None)
+        Trade.timestamp_exit.is_(None),
+        Trade.market == market,
     ).scalar() or 0
     return open_count < RISK_PARAMS["max_concurrent_positions"]
 
 
-def check_portfolio_heat(db: Session, portfolio_value: float) -> bool:
+def check_portfolio_heat(db: Session, portfolio_value: float, market: str = "INDIA") -> bool:
     """Returns True if total risk across open positions is under max_portfolio_heat_pct."""
-    open_trades = db.query(Trade).filter(Trade.timestamp_exit.is_(None)).all()
+    open_trades = db.query(Trade).filter(
+        Trade.timestamp_exit.is_(None),
+        Trade.market == market,
+    ).all()
     total_risk = sum(
         abs(t.entry_price - t.stop_loss_price) * t.quantity
         for t in open_trades
@@ -139,21 +147,23 @@ def check_portfolio_heat(db: Session, portfolio_value: float) -> bool:
 # Internal helpers                                                              #
 # --------------------------------------------------------------------------- #
 
-def _get_today_pnl_pct(db: Session, portfolio_value: float) -> float:
+def _get_today_pnl_pct(db: Session, portfolio_value: float, market: str = "INDIA") -> float:
     today = date.today()
     rows = db.query(Trade).filter(
         func.date(Trade.timestamp_exit) == today,
         Trade.net_pnl.isnot(None),
+        Trade.market == market,
     ).all()
     total = sum(t.net_pnl for t in rows)
     return total / portfolio_value if portfolio_value else 0.0
 
 
-def _get_week_pnl_pct(db: Session, portfolio_value: float) -> float:
+def _get_week_pnl_pct(db: Session, portfolio_value: float, market: str = "INDIA") -> float:
     week_start = date.today() - timedelta(days=date.today().weekday())
     rows = db.query(Trade).filter(
         func.date(Trade.timestamp_exit) >= week_start,
         Trade.net_pnl.isnot(None),
+        Trade.market == market,
     ).all()
     total = sum(t.net_pnl for t in rows)
     return total / portfolio_value if portfolio_value else 0.0

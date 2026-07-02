@@ -7,17 +7,19 @@ independent processes.
 import json
 import subprocess
 
-import streamlit as st
-
 from config.settings import ENGINE_PYTHON, PROJECT_ROOT
 
 
-def run_screener(top_n: int | None = 6, timeout: int = 120) -> tuple[list[dict], str | None]:
+def run_screener(market: str = "INDIA", top_n: int | None = 6, timeout: int = 120) -> tuple[list[dict], str | None]:
     """Returns (results, error_message). error_message is None on success."""
+    _SCREENER_MAP = {"INDIA": "run_india_screener", "US": "run_us_screener"}
+    if market not in _SCREENER_MAP:
+        return [], f"Unknown market '{market}'. Valid values: {list(_SCREENER_MAP)}."
+    screener_fn = _SCREENER_MAP[market]
     code = (
         "import json; "
-        "from engine.screener import run_india_screener; "
-        f"print(json.dumps(run_india_screener(top_n={top_n!r})))"
+        f"from engine.screener import {screener_fn}; "
+        f"print(json.dumps({screener_fn}(top_n={top_n!r})))"
     )
     try:
         result = subprocess.run(

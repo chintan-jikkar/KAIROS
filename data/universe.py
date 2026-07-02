@@ -20,17 +20,18 @@ INDIA_MASTER_POOL = {
     ],
 }
 
-US_MASTER_POOL = [
-    "NVDA", "TSLA", "AMD", "META", "AAPL",
-    "SPY", "QQQ", "MSFT", "AMZN", "GOOGL",
-]
+US_MASTER_POOL = {
+    "large_cap_momentum": ["AAPL", "MSFT", "GOOGL", "AMZN", "META"],
+    "high_atr_volatile":  ["NVDA", "TSLA", "AMD", "COIN", "PLTR"],
+    "defensive_reversal": ["JNJ", "PG", "KO", "PEP", "WMT"],
+    "broad_etf":          ["SPY", "QQQ", "DIA", "IWM"],
+}
 
 INDIA_SCREEN_CRITERIA = {
     "min_avg_daily_volume": 500_000,
     "min_atr_pct_14d": 1.5,
     "min_price_inr": 50,
     "max_price_inr": 5_000,
-    "min_beta": 0.9,
     "rsi14_range": (30, 70),
     "no_earnings_within_days": 7,
     "min_market_cap_cr": 5_000,
@@ -39,8 +40,7 @@ INDIA_SCREEN_CRITERIA = {
 US_SCREEN_CRITERIA = {
     "min_avg_daily_volume": 2_000_000,
     "min_atr_pct_14d": 2.5,
-    "price_range_usd": (20, 500),
-    "min_beta": 1.1,
+    "price_range_usd": (20, 750),   # raised from 500 — META (~$616) and AMD (~$546) were blocked
     "rsi14_range": (35, 65),
     "no_earnings_within_days": 10,
 }
@@ -64,9 +64,28 @@ STRATEGY_ASSIGNMENT_RULES = {
     "BB_MEANREV":   {"adx_max": 20, "atr_min": 1.5},
 }
 
-# Flat list of all India symbols for convenience
+# Initial thresholds — calibrated in Task 8 after a real run against live yfinance data.
+# Structure mirrors STRATEGY_ASSIGNMENT_RULES; same cascade priority order.
+US_STRATEGY_ASSIGNMENT_RULES = {
+    "RSI2_OVN":     {"beta_max": 1.3,  "atr_max": 3.0},
+    "ORB_BRK":      {"atr_min": 2.5,   "beta_min": 1.5},  # calibrated 2026-07-01: COIN/TSLA/NVDA all beta≥1.9; 1.1 let AMZN (beta=1.26, ADX=27.6) jump the queue ahead of SUPERTREND
+    "MOM_CONT":     {"atr_min": 3.0,   "volume_ratio_min": 1.5},
+    "SUPERTREND":   {"adx_min": 25,    "atr_min": 2.5},
+    "TREND_EMA":    {"adx_min": 25,    "atr_max": 2.5},
+    "DONCHIAN_BRK": {"adx_min": 20,    "adx_max": 25},
+    "BB_MEANREV":   {"adx_max": 20,    "atr_min": 2.0},  # raised from India's 1.5; US baseline vol is higher
+}
+
+
 def get_india_all_symbols() -> list[str]:
     symbols = []
     for group in INDIA_MASTER_POOL.values():
+        symbols.extend(group)
+    return list(dict.fromkeys(symbols))  # deduplicate, preserve order
+
+
+def get_us_all_symbols() -> list[str]:
+    symbols = []
+    for group in US_MASTER_POOL.values():
         symbols.extend(group)
     return list(dict.fromkeys(symbols))  # deduplicate, preserve order

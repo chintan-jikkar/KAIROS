@@ -12,7 +12,7 @@ import pandas as pd
 from loguru import logger
 from sqlalchemy.orm import Session
 
-from data.market_data import fetch_india_daily, fetch_india_intraday
+from data.market_data import fetch_india_daily, fetch_india_intraday, fetch_us_daily, fetch_us_intraday
 from data.indicators import add_all_strategy_indicators, add_volume_sma, add_bbands
 from database.models import Signal
 from strategies.rsi2_overnight import RSI2OvernightStrategy
@@ -71,7 +71,7 @@ def run_eod_scan(
             continue
 
         try:
-            df = fetch_india_daily(symbol, period="1y")
+            df = fetch_india_daily(symbol, period="1y") if market == "INDIA" else fetch_us_daily(symbol, period="1y")
             if df.empty:
                 continue
             df = add_all_strategy_indicators(df)
@@ -197,14 +197,20 @@ def check_exits_for_open_trades(db: Session) -> list[dict]:
 
         try:
             if trade.strategy_id in INTRADAY_STRATEGIES:
-                df = fetch_india_intraday(trade.symbol, interval="15m", period="1d")
+                if trade.market == "INDIA":
+                    df = fetch_india_intraday(trade.symbol, interval="15m", period="1d")
+                else:
+                    df = fetch_us_intraday(trade.symbol, interval="15m", period="1d")
                 if df.empty:
                     continue
                 if trade.strategy_id == "BB_MEANREV":
                     add_bbands(df, period=strategy.params["bb_period"], std=strategy.params["entry_std"])
                 current_bar = df.iloc[-1].to_dict()
             else:
-                df = fetch_india_daily(trade.symbol, period="1y")
+                if trade.market == "INDIA":
+                    df = fetch_india_daily(trade.symbol, period="1y")
+                else:
+                    df = fetch_us_daily(trade.symbol, period="1y")
                 if df.empty:
                     continue
                 df = add_all_strategy_indicators(df)
