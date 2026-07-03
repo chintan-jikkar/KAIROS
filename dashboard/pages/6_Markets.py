@@ -104,27 +104,20 @@ STRATEGY_DIRECTION = {
 }
 
 SCREENER_COLUMNS = [
-    ("", "28px"), ("Symbol", "1fr"), ("Price", "0.9fr"), ("Target", "0.9fr"), ("ATR%", "0.7fr"),
-    ("Vol ratio", "0.8fr"), ("RSI14", "0.7fr"), ("Beta", "0.6fr"),
-    ("Strategy", "1.1fr"), ("Score", "0.7fr"),
+    ("", "28px"), ("Symbol", "1fr"), ("Price", "0.9fr"), ("ATR%", "0.7fr"),
+    ("MOM 6M", "0.8fr"), ("MOM 1M", "0.8fr"), ("LOW VOL", "0.8fr"), ("VOL TRD", "0.8fr"),
+    ("Strategy", "1.1fr"), ("Alpha", "0.7fr"),
 ]
 SCREENER_GRID_TEMPLATE = " ".join(w for _, w in SCREENER_COLUMNS)
 
 
-def _target_text(row, currency_sym: str = "₹") -> str:
-    """Target only shows for rows with an actual live signal firing today —
-    'assigned strategy' means the regime fits, not that entry conditions are
-    met right now, so most rows legitimately won't have one."""
-    if not row.get("has_live_signal") or row.get("target_price") is None:
-        return "–"
-    return f"{currency_sym}{row['target_price']:,.2f}"
-
-
-def _target_color_class(row) -> str:
-    if not row.get("has_live_signal"):
-        return "neutral"
-    direction = STRATEGY_DIRECTION.get(row["assigned_strategy"], "LONG")
-    return "positive" if direction == "LONG" else "negative"
+def _factor_z_html(z_value) -> str:
+    """Render a factor Z-score as colored text (+1.23 / -0.45 / n/a)."""
+    if z_value is None or (isinstance(z_value, float) and z_value != z_value):
+        return '<span style="color:var(--text-secondary)">n/a</span>'
+    color = "var(--positive)" if z_value >= 0 else "var(--negative)"
+    sign = "+" if z_value >= 0 else ""
+    return f'<span class="kairos-mono" style="color:{color};font-size:12px;">{sign}{z_value:.2f}</span>'
 
 
 def render_screener_table(
@@ -139,7 +132,8 @@ def render_screener_table(
     in the row. Each row is a real st.container so the invisible full-size
     button genuinely overlays the visual HTML (unlike stacking separate
     st.markdown calls, which render as siblings, not nested)."""
-    currency_sym = market_currency_symbol(market)
+    currency_sym = "" if market == "FX" else market_currency_symbol(market)
+    price_fmt = (lambda p: f"{p:.4f}") if market == "FX" else (lambda p: f"{currency_sym}{p:,.2f}")
     logo_ticker = lambda sym: sym + ".NS" if market == "INDIA" else sym
     sorted_df = df.sort_values("score", ascending=False).reset_index(drop=True)
     selected = st.session_state.get(session_key)
@@ -156,6 +150,10 @@ def render_screener_table(
             symbol = row["symbol"]
             is_active = symbol in active_symbols
             is_selected = symbol == selected
+            f6m  = row.get("factor_mom_6m")
+            f1m  = row.get("factor_mom_1m")
+            flv  = row.get("factor_low_vol")
+            fvt  = row.get("factor_vol_trend")
             row_html = (
                 f'<div class="screener-row {"selected" if is_selected else ""}" '
                 f'style="grid-template-columns:{SCREENER_GRID_TEMPLATE};">'
@@ -164,13 +162,13 @@ def render_screener_table(
                 f'<img src="{logo_url(logo_ticker(symbol))}" loading="lazy" '
                 f'style="width:20px;height:20px;border-radius:4px;background:#fff;object-fit:contain;flex-shrink:0;" '
                 f'onerror="this.style.display=\'none\'"/>'
-                f'<span class="kairos-mono" style="font-weight:600;">{symbol}</span></div>'
-                f'<div class="kairos-mono">{currency_sym}{row["price"]:,.2f}</div>'
-                f'<div class="kairos-mono {_target_color_class(row)}">{_target_text(row, currency_sym)}</div>'
+                f'<span class="kairos-mono" style="font-weight:600;">{row.get("display_name", symbol)}</span></div>'
+                f'<div class="kairos-mono">{price_fmt(row["price"])}</div>'
                 f'<div class="kairos-mono">{row["atr_pct"]:.2f}%</div>'
-                f'<div class="kairos-mono">{row["vol_ratio"]:.2f}x</div>'
-                f'<div class="kairos-mono">{row["rsi14"]:.1f}</div>'
-                f'<div class="kairos-mono">{row["beta"]:.2f}</div>'
+                f'<div>{_factor_z_html(f6m)}</div>'
+                f'<div>{_factor_z_html(f1m)}</div>'
+                f'<div>{_factor_z_html(flv)}</div>'
+                f'<div>{_factor_z_html(fvt)}</div>'
                 f'<div><span class="badge {"badge-direction-short" if STRATEGY_DIRECTION.get(row["assigned_strategy"]) == "SHORT" else "badge-direction-long"}">'
                 f'{row["assigned_strategy"]}</span></div>'
                 f'<div class="kairos-mono" style="font-weight:600;">{row["score"]:.0f}</div>'
@@ -293,7 +291,7 @@ with tab_india:
                 unsafe_allow_html=True,
             )
             metric_pairs = [
-                ("Price", f"₹{sel['price']:,.2f}"), ("Score", f"{sel['score']:.0f}/100"),
+                ("Price", f"₹{sel['price']:,.2f}"), ("Alpha", f"{sel['score']:.0f}/100"),
                 ("ATR %", f"{sel['atr_pct']:.2f}%"), ("Vol ratio", f"{sel['vol_ratio']:.2f}x"),
                 ("RSI 14", f"{sel['rsi14']:.1f}"), ("Beta", f"{sel['beta']:.2f}"),
             ]
@@ -305,6 +303,32 @@ with tab_india:
                         f'<p class="kairos-mono" style="font-size:14px;">{val}</p>',
                         unsafe_allow_html=True,
                     )
+
+            _has_factors = sel.get("factor_mom_6m") is not None
+            if _has_factors:
+                st.markdown(
+                    '<p class="kpi-label" style="margin:12px 0 6px;">Factor Z-scores</p>',
+                    unsafe_allow_html=True,
+                )
+                _factor_pairs = [
+                    ("MOM 6M", sel.get("factor_mom_6m")),
+                    ("MOM 1M", sel.get("factor_mom_1m")),
+                    ("LOW VOL", sel.get("factor_low_vol")),
+                    ("VOL TRD", sel.get("factor_vol_trend")),
+                ]
+                fcols = st.columns(4)
+                for fc, (flabel, fval) in zip(fcols, _factor_pairs):
+                    with fc:
+                        bar_pct = int(((fval or 0) + 2) / 4 * 100)
+                        bar_col = "var(--positive)" if (fval or 0) >= 0 else "var(--negative)"
+                        sign = "+" if (fval or 0) >= 0 else ""
+                        st.markdown(
+                            f'<p class="kpi-label" style="margin:0 0 3px;font-size:10px;">{flabel}</p>'
+                            f'<p class="kairos-mono" style="font-size:13px;color:{bar_col};margin:0 0 4px;">{sign}{fval:.2f}</p>'
+                            f'<div style="height:3px;background:var(--surface-glass);border-radius:2px;">'
+                            f'<div style="width:{bar_pct}%;height:100%;background:{bar_col};border-radius:2px;"></div></div>',
+                            unsafe_allow_html=True,
+                        )
 
             st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
             already_pinned = sel["symbol"] in {w.symbol for w in watchlist}
@@ -414,7 +438,7 @@ with tab_us:
                 unsafe_allow_html=True,
             )
             us_metric_pairs = [
-                ("Price", f"${us_sel['price']:,.2f}"), ("Score", f"{us_sel['score']:.0f}/100"),
+                ("Price", f"${us_sel['price']:,.2f}"), ("Alpha", f"{us_sel['score']:.0f}/100"),
                 ("ATR %", f"{us_sel['atr_pct']:.2f}%"), ("Vol ratio", f"{us_sel['vol_ratio']:.2f}x"),
                 ("RSI 14", f"{us_sel['rsi14']:.1f}"), ("Beta", f"{us_sel['beta']:.2f}"),
             ]
@@ -426,6 +450,32 @@ with tab_us:
                         f'<p class="kairos-mono" style="font-size:14px;">{val}</p>',
                         unsafe_allow_html=True,
                     )
+
+            _us_has_factors = us_sel.get("factor_mom_6m") is not None
+            if _us_has_factors:
+                st.markdown(
+                    '<p class="kpi-label" style="margin:12px 0 6px;">Factor Z-scores</p>',
+                    unsafe_allow_html=True,
+                )
+                _us_factor_pairs = [
+                    ("MOM 6M", us_sel.get("factor_mom_6m")),
+                    ("MOM 1M", us_sel.get("factor_mom_1m")),
+                    ("LOW VOL", us_sel.get("factor_low_vol")),
+                    ("VOL TRD", us_sel.get("factor_vol_trend")),
+                ]
+                us_fcols = st.columns(4)
+                for fc, (flabel, fval) in zip(us_fcols, _us_factor_pairs):
+                    with fc:
+                        bar_pct = int(((fval or 0) + 2) / 4 * 100)
+                        bar_col = "var(--positive)" if (fval or 0) >= 0 else "var(--negative)"
+                        sign = "+" if (fval or 0) >= 0 else ""
+                        st.markdown(
+                            f'<p class="kpi-label" style="margin:0 0 3px;font-size:10px;">{flabel}</p>'
+                            f'<p class="kairos-mono" style="font-size:13px;color:{bar_col};margin:0 0 4px;">{sign}{fval:.2f}</p>'
+                            f'<div style="height:3px;background:var(--surface-glass);border-radius:2px;">'
+                            f'<div style="width:{bar_pct}%;height:100%;background:{bar_col};border-radius:2px;"></div></div>',
+                            unsafe_allow_html=True,
+                        )
 
             st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
             us_watchlist = get_watchlist(db, market="US")
@@ -468,4 +518,115 @@ with tab_fx:
         render_quote_card("GBP/USD", "GBPUSD=X")
     with cols[3]:
         render_quote_card("USD/JPY", "JPY=X")
-    st.caption("FX trading routed via NSE Currency Derivatives (India) or OANDA (US) — Phase 7.")
+
+    st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
+    st.markdown('<p style="color:var(--text-secondary);font-size:13px;margin-bottom:8px;">FX pair rankings (4-factor alpha composite)</p>', unsafe_allow_html=True)
+
+    fx_rc1, fx_rc2 = st.columns([4, 1])
+    with fx_rc2:
+        fx_run_clicked = st.button("Re-run screener", key="fx_run_screener_btn", use_container_width=True)
+
+    fx_full_cache_path = Path(__file__).parent.parent.parent / "config" / "screener_full_cache_fx.json"
+
+    if fx_run_clicked:
+        with st.spinner("Screening FX pairs… (~20s)"):
+            from dashboard.components.engine_bridge import run_screener
+            fx_full_results, fx_err = run_screener(market="FX", top_n=None)
+            if fx_err:
+                st.error(fx_err)
+            else:
+                fx_full_cache_path.write_text(json.dumps(
+                    {"generated_at": _dt.now().strftime("%Y-%m-%d %H:%M:%S"), "results": fx_full_results}, indent=2
+                ))
+                st.session_state["_fx_screener_full_results"] = fx_full_results
+                st.session_state["_fx_screener_cached_at"] = "just now"
+                if fx_full_results:
+                    st.success(f"FX screener ran — {len(fx_full_results)} pairs ranked.")
+                else:
+                    st.warning("FX screener returned 0 results — check data connectivity.")
+
+    if st.session_state.get("_fx_screener_full_results") is None and fx_full_cache_path.exists():
+        fx_cached = json.loads(fx_full_cache_path.read_text())
+        st.session_state["_fx_screener_full_results"] = fx_cached["results"]
+        st.session_state["_fx_screener_cached_at"] = fx_cached["generated_at"]
+
+    fx_full_results = st.session_state.get("_fx_screener_full_results", None)
+
+    if fx_full_results:
+        fx_cached_at = st.session_state.get("_fx_screener_cached_at")
+        if fx_cached_at and fx_cached_at != "just now":
+            st.caption(f"Showing cached results from {fx_cached_at}. Click 'Re-run screener' to refresh.")
+        fx_df = pd.DataFrame(fx_full_results)
+        render_screener_table(fx_df, set(), market="FX", session_key="_fx_screener_selected_symbol")
+        st.caption("FX execution via NSE Currency Derivatives (India) or OANDA (US) — Phase 7.")
+    else:
+        st.info("No FX screener data yet. Click 'Re-run screener' to rank the 8 major pairs.")
+        st.caption("FX execution via NSE Currency Derivatives (India) or OANDA (US) — Phase 7.")
+
+    fx_selected_symbol = st.session_state.get("_fx_screener_selected_symbol")
+    if fx_selected_symbol and fx_full_results:
+        fx_df_sel = pd.DataFrame(fx_full_results)
+        if fx_selected_symbol in fx_df_sel["symbol"].values:
+            fx_sel = fx_df_sel[fx_df_sel["symbol"] == fx_selected_symbol].iloc[0]
+            st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
+            st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+
+            fx_dd1, fx_dd2 = st.columns([1, 1])
+            with fx_dd1:
+                st.markdown(
+                    f"""
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                        <span style="font-size:16px;font-weight:600;">{fx_sel.get('display_name', fx_sel['symbol'])}</span>
+                        <span class="badge badge-long">{fx_sel['assigned_strategy']}</span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                fx_metric_pairs = [
+                    ("Rate", f"{fx_sel['price']:.4f}"),
+                    ("Alpha", f"{fx_sel['score']:.0f}/100"),
+                    ("ATR %", f"{fx_sel['atr_pct']:.3f}%"),
+                    ("Vol ratio", f"{fx_sel['vol_ratio']:.2f}x"),
+                    ("RSI 14", f"{fx_sel['rsi14']:.1f}"),
+                    ("Beta vs DXY", f"{fx_sel['beta']:.2f}"),
+                ]
+                fx_mcols = st.columns(2)
+                for i, (label, val) in enumerate(fx_metric_pairs):
+                    with fx_mcols[i % 2]:
+                        st.markdown(
+                            f'<p class="kpi-label" style="margin:8px 0 2px;">{label}</p>'
+                            f'<p class="kairos-mono" style="font-size:14px;">{val}</p>',
+                            unsafe_allow_html=True,
+                        )
+
+                _fx_has_factors = fx_sel.get("factor_mom_6m") is not None
+                if _fx_has_factors:
+                    st.markdown(
+                        '<p class="kpi-label" style="margin:12px 0 6px;">Factor Z-scores</p>',
+                        unsafe_allow_html=True,
+                    )
+                    _fx_factor_pairs = [
+                        ("MOM 6M", fx_sel.get("factor_mom_6m")),
+                        ("MOM 1M", fx_sel.get("factor_mom_1m")),
+                        ("LOW VOL", fx_sel.get("factor_low_vol")),
+                        ("VOL TRD", fx_sel.get("factor_vol_trend")),
+                    ]
+                    fx_fcols = st.columns(4)
+                    for fc, (flabel, fval) in zip(fx_fcols, _fx_factor_pairs):
+                        with fc:
+                            bar_pct = int(((fval or 0) + 2) / 4 * 100)
+                            bar_col = "var(--positive)" if (fval or 0) >= 0 else "var(--negative)"
+                            sign = "+" if (fval or 0) >= 0 else ""
+                            st.markdown(
+                                f'<p class="kpi-label" style="margin:0 0 3px;font-size:10px;">{flabel}</p>'
+                                f'<p class="kairos-mono" style="font-size:13px;color:{bar_col};margin:0 0 4px;">{sign}{fval:.2f}</p>'
+                                f'<div style="height:3px;background:var(--surface-glass);border-radius:2px;">'
+                                f'<div style="width:{bar_pct}%;height:100%;background:{bar_col};border-radius:2px;"></div></div>',
+                                unsafe_allow_html=True,
+                            )
+
+            with fx_dd2:
+                st.markdown('<p style="font-size:12px;color:var(--text-secondary);margin:4px 0 8px;">Recent headlines</p>', unsafe_allow_html=True)
+                render_news_list(fx_sel["symbol"].replace("=X", ""), limit=4)
+
+            st.markdown('</div>', unsafe_allow_html=True)

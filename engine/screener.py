@@ -23,10 +23,14 @@ from data.indicators import add_all_strategy_indicators, add_atr_pct, add_volume
 from data.universe import (
     get_india_all_symbols,
     get_us_all_symbols,
+    get_fx_all_symbols,
     INDIA_SCREEN_CRITERIA,
     US_SCREEN_CRITERIA,
+    FX_SCREEN_CRITERIA,
     STRATEGY_ASSIGNMENT_RULES,
     US_STRATEGY_ASSIGNMENT_RULES,
+    FX_STRATEGY_ASSIGNMENT_RULES,
+    FX_DISPLAY_NAMES,
 )
 from engine.signals import STRATEGY_REGISTRY
 
@@ -151,6 +155,105 @@ def run_us_screener(top_n: int | None = 6) -> list[dict]:
     ranked = df.to_dict(orient="records")
     logger.info(f"US screener selected {len(ranked)} stocks: {[r['symbol'] for r in ranked]}")
     return ranked
+
+
+def run_fx_screener(top_n: int | None = None) -> list[dict]:
+    """Rank FX pairs by 4-factor alpha composite.
+    top_n defaults to None (return all qualifying pairs) — the FX universe is small
+    (8 pairs) so there is no reason to cut it down for display purposes.
+    Beta is computed vs DXY (US Dollar Index), representing the dollar's directional pull.
+    """
+    dxy_df = fetch_us_daily("DX-Y.NYB", period="1y")
+    if not dxy_df.empty and len(dxy_df) >= 2:
+        dxy_closes = dxy_df["close"].tolist()
+        dxy_returns = [
+            (dxy_closes[i] - dxy_closes[i - 1]) / dxy_closes[i - 1]
+            for i in range(1, len(dxy_closes))
+        ]
+    else:
+        logger.warning("Could not fetch DXY data — FX beta will default to 1.0")
+        dxy_returns = []
+
+    symbols = get_fx_all_symbols()
+    results = []
+
+    for symbol in symbols:
+        try:
+            record = _evaluate_symbol_fx(symbol, dxy_returns)
+            if record:
+                results.append(record)
+        except Exception as exc:
+            logger.warning(f"FX screener skipped {symbol}: {exc}")
+
+    if not results:
+        logger.warning("FX screener returned 0 qualifying pairs")
+        return []
+
+    results = _apply_factor_composite(results)
+    df = pd.DataFrame(results)
+    df = df.sort_values("composite_score", ascending=False)
+    if top_n is not None:
+        df = df.head(top_n)
+
+    ranked = df.to_dict(orient="records")
+    logger.info(f"FX screener ranked {len(ranked)} pairs: {[r['symbol'] for r in ranked]}")
+    return ranked
+
+
+def _evaluate_symbol_fx(symbol: str, dxy_returns: list[float]) -> dict | None:
+    c = FX_SCREEN_CRITERIA
+
+    df = fetch_us_daily(symbol, period="1y")   # yfinance accepts FX tickers directly (EURUSD=X)
+    if df.empty or len(df) < 60:
+        return None
+
+    df = add_all_strategy_indicators(df)
+    last = df.iloc[-1]
+
+    price = float(last["close"])
+
+    atr_pct = float(last.get("atr_pct_14", 0))
+    if atr_pct < c["min_atr_pct_14d"]:
+        return None
+
+    rsi14 = float(last.get("rsi_14", 50))
+    rsi_lo, rsi_hi = c["rsi14_range"]
+    if not (rsi_lo <= rsi14 <= rsi_hi):
+        return None
+
+    adx = float(last.get("adx_14")) if last.get("adx_14") is not None else None
+    vol_ratio = float(last.get("vol_ratio_20", 1.0))
+    avg_vol = float(df["volume"].tail(20).mean())
+
+    closes = df["close"].tolist()
+    symbol_returns = [(closes[i] - closes[i - 1]) / closes[i - 1] for i in range(1, len(closes))]
+    beta = _compute_beta_vs_spy(symbol_returns, dxy_returns) if dxy_returns else 1.0
+
+    strategy_id = _assign_strategy(
+        atr_pct=atr_pct, beta=beta, vol_ratio=vol_ratio, adx=adx,
+        rules=FX_STRATEGY_ASSIGNMENT_RULES,
+    )
+    signal = STRATEGY_REGISTRY[strategy_id]().generate_signal(symbol, df)
+
+    factor_inputs = _compute_factor_inputs(closes)
+
+    return {
+        "symbol": symbol,
+        "display_name": FX_DISPLAY_NAMES.get(symbol, symbol),
+        "price": round(price, 5),
+        "atr_pct": round(atr_pct, 3),
+        "vol_ratio": round(vol_ratio, 2),
+        "avg_volume": int(avg_vol),
+        "rsi14": round(rsi14, 1),
+        "beta": round(beta, 2),
+        "adx": round(adx, 1) if adx is not None else None,
+        "assigned_strategy": strategy_id,
+        "has_live_signal": signal is not None,
+        "target_price": round(signal["target_price"], 5) if signal else None,
+        "score": 0.0,
+        "composite_score": 0.0,
+        **factor_inputs,
+    }
 
 
 def _evaluate_symbol(symbol: str, nifty_returns: list[float] | None = None) -> dict | None:
@@ -411,7 +514,10 @@ def _assign_strategy(
     rules: dict = STRATEGY_ASSIGNMENT_RULES,
 ) -> str:
     # Priority cascade: most specific/extreme conditions first, RSI2_OVN is the catch-all.
-    if (atr_pct >= rules["MOM_CONT"]["atr_min"]
+    # MOM_CONT, GAP_GO, and ORB_BRK are guarded because FX rules omit these keys
+    # (all three require a single exchange-open event that FX doesn't have).
+    if ("MOM_CONT" in rules
+            and atr_pct >= rules["MOM_CONT"]["atr_min"]
             and vol_ratio >= rules["MOM_CONT"]["volume_ratio_min"]):
         return "MOM_CONT"
 
@@ -420,7 +526,8 @@ def _assign_strategy(
             and beta >= rules["GAP_GO"]["beta_min"]):
         return "GAP_GO"
 
-    if (atr_pct >= rules["ORB_BRK"]["atr_min"]
+    if ("ORB_BRK" in rules
+            and atr_pct >= rules["ORB_BRK"]["atr_min"]
             and beta >= rules["ORB_BRK"]["beta_min"]):
         return "ORB_BRK"
 

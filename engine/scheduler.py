@@ -8,7 +8,7 @@ India (IST, Asia/Kolkata) schedule:
   09:00 IST Mon–Fri  — morning health check
   09:00–14:45 IST    — BB_MEANREV scan every 15 min
   09:20 IST Mon–Fri  — strategy-driven exit check (RSI2_OVN, TREND_EMA, etc.)
-  09:30 IST Mon–Fri  — confirm MOM_CONT deferred signals from previous EOD
+  09:30 IST Mon–Fri  — confirm MOM_CONT deferred signals + GAP_GO scan (first 15-min candle)
   10:00–11:30 IST    — ORB scan every 15 min
   15:00 IST Mon–Fri  — EOD entry scan (RSI2_OVN, MOM_CONT flags, TREND_EMA)
   15:15 IST Mon–Fri  — strategy-driven exit check (second pass)
@@ -21,6 +21,7 @@ US (ET, America/New_York) schedule:
   09:30 ET  Mon–Fri  — morning health check (NYSE open)
   09:35 ET  Mon–Fri  — strategy-driven exit check
   09:45 ET  Mon–Fri  — confirm MOM_CONT deferred signals from previous EOD
+  09:46 ET  Mon–Fri  — GAP_GO scan (first 15-min candle completes)
   10:00–11:30 ET     — ORB scan every 15 min
   09:30–15:45 ET     — BB_MEANREV scan every 15 min
   15:30 ET  Mon–Fri  — EOD entry scan (RSI2_OVN, MOM_CONT flags, TREND_EMA)
@@ -54,7 +55,7 @@ from database.trade_log import save_pending_signal, load_pending_signals, clear_
 from engine.executor import Executor
 from engine.screener import run_india_screener, run_us_screener
 from engine.signals import (
-    run_eod_scan, run_orb_scan, run_meanrev_scan,
+    run_eod_scan, run_orb_scan, run_meanrev_scan, run_gap_go_scan,
     confirm_momentum_entries, check_exits_for_open_trades,
 )
 
@@ -203,6 +204,26 @@ def job_orb_scan():
     for signal in signals:
         result = executor.execute_entry(signal)
         logger.info(f"ORB entry: {signal['symbol']} → {result['status']} ({result['reason']})")
+
+    db.close()
+
+
+def job_gap_go_scan():
+    """09:30 IST / 09:46 ET — GAP_GO scan after the first 15-min candle closes.
+    Only fires for stocks assigned GAP_GO in the active universe."""
+    if not _is_market_open(ACTIVE_MARKET):
+        return
+
+    db = _make_session()
+    snap = get_latest_snapshot(db, ACTIVE_MARKET)
+    capital = snap.portfolio_value if snap else STARTING_CAPITAL_INR
+    broker = PaperBroker(db, capital, market=ACTIVE_MARKET)
+    executor = _make_executor(db, broker)
+
+    signals = run_gap_go_scan(_active_universe, db, ACTIVE_MARKET)
+    for signal in signals:
+        result = executor.execute_entry(signal)
+        logger.info(f"GAP_GO entry: {signal['symbol']} → {result['status']} ({result['reason']})")
 
     db.close()
 
@@ -389,6 +410,8 @@ def _register_india_schedule(scheduler: BlockingScheduler) -> None:
         hour=9, minute=20, day_of_week="mon-fri", timezone=IST))
     scheduler.add_job(job_confirm_momentum, CronTrigger(
         hour=9, minute=30, day_of_week="mon-fri", timezone=IST))
+    scheduler.add_job(job_gap_go_scan, CronTrigger(
+        hour=9, minute=30, day_of_week="mon-fri", timezone=IST))
     scheduler.add_job(job_orb_scan, CronTrigger(
         hour="10,11", minute="0,15,30,45", day_of_week="mon-fri", timezone=IST))
     scheduler.add_job(job_meanrev_scan, CronTrigger(
@@ -418,6 +441,8 @@ def _register_us_schedule(scheduler: BlockingScheduler) -> None:
         hour=9, minute=35, day_of_week="mon-fri", timezone=ET))
     scheduler.add_job(job_confirm_momentum, CronTrigger(
         hour=9, minute=45, day_of_week="mon-fri", timezone=ET))
+    scheduler.add_job(job_gap_go_scan, CronTrigger(
+        hour=9, minute=46, day_of_week="mon-fri", timezone=ET))
     # ORB window: 10:00–11:30 ET (first 2 hrs of session mirror India pattern)
     scheduler.add_job(job_orb_scan, CronTrigger(
         hour="10,11", minute="0,15,30,45", day_of_week="mon-fri", timezone=ET))

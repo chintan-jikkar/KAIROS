@@ -83,6 +83,48 @@ US_STRATEGY_ASSIGNMENT_RULES = {
 }
 
 
+FX_MASTER_POOL = {
+    # Major pairs — highest liquidity, suitable for all trend/mean-rev strategies
+    "majors": ["EURUSD=X", "GBPUSD=X", "USDJPY=X", "USDCHF=X", "AUDUSD=X", "USDCAD=X"],
+    # EM / commodity-linked
+    "em_commodity": ["NZDUSD=X", "USDINR=X"],
+}
+
+# Human-readable display names for FX tickers shown in the dashboard table.
+FX_DISPLAY_NAMES: dict[str, str] = {
+    "EURUSD=X": "EUR/USD",
+    "GBPUSD=X": "GBP/USD",
+    "USDJPY=X": "USD/JPY",
+    "USDCHF=X": "USD/CHF",
+    "AUDUSD=X": "AUD/USD",
+    "USDCAD=X": "USD/CAD",
+    "NZDUSD=X": "NZD/USD",
+    "USDINR=X": "USD/INR",
+}
+
+FX_SCREEN_CRITERIA = {
+    # FX daily ATR% is much smaller than equities (majors avg 0.4–0.8%).
+    # 0.25% threshold excludes only truly stagnant periods; in practice all
+    # major pairs qualify during normal market conditions.
+    "min_atr_pct_14d": 0.25,
+    # Wider RSI band — FX can trend for extended periods beyond equity norms.
+    "rsi14_range": (20, 80),
+}
+
+# Session-dependent strategies (GAP_GO, ORB_BRK, MOM_CONT) require a single exchange
+# opening event that FX doesn't have — excluded from the FX cascade.
+FX_STRATEGY_ASSIGNMENT_RULES: dict[str, dict] = {
+    "SUPERTREND":   {"adx_min": 25, "atr_min": 0.5},
+    "TREND_EMA":    {"adx_min": 25, "atr_max": 0.6},
+    "DUAL_EMA":     {"adx_min": 20, "adx_max": 27},
+    "DONCHIAN_BRK": {"adx_min": 18, "adx_max": 25},
+    "HIGH_52W":     {"adx_min": 15, "adx_max": 20, "volume_ratio_min": 1.2},
+    "MACD_CROSS":   {"adx_min": 12, "adx_max": 18},
+    "BB_MEANREV":   {"adx_max": 20, "atr_min": 0.25},
+    "RSI2_OVN":     {"beta_max": 99, "atr_max": 99},   # catch-all
+}
+
+
 def get_india_all_symbols() -> list[str]:
     symbols = []
     for group in INDIA_MASTER_POOL.values():
@@ -95,3 +137,10 @@ def get_us_all_symbols() -> list[str]:
     for group in US_MASTER_POOL.values():
         symbols.extend(group)
     return list(dict.fromkeys(symbols))  # deduplicate, preserve order
+
+
+def get_fx_all_symbols() -> list[str]:
+    symbols = []
+    for group in FX_MASTER_POOL.values():
+        symbols.extend(group)
+    return list(dict.fromkeys(symbols))
