@@ -46,32 +46,38 @@ US_SCREEN_CRITERIA = {
 }
 
 # Strategy assignment rules — used by screener to auto-assign each stock.
-# Priority cascade (see engine/screener.py::_assign_strategy): MOM_CONT > ORB_BRK >
-# SUPERTREND > TREND_EMA > DONCHIAN_BRK > BB_MEANREV > RSI2_OVN (catch-all default).
-# SUPERTREND and DONCHIAN_BRK added 2026-06-20 (docs/strategy-library.md) — both
-# slotted into ADX/ATR bands that don't overlap the 5 original strategies:
-# SUPERTREND takes the high-ADX+high-ATR names TREND_EMA's atr_max excludes;
-# DONCHIAN_BRK takes the ADX 20-25 gap between BB_MEANREV's and TREND_EMA's bands.
+# Priority cascade (see engine/screener.py::_assign_strategy):
+#   MOM_CONT > GAP_GO > ORB_BRK > SUPERTREND > TREND_EMA > DUAL_EMA
+#   > DONCHIAN_BRK > HIGH_52W > MACD_CROSS > BB_MEANREV > RSI2_OVN (catch-all)
+# DUAL_EMA (ADX 22-27): faster EMA-cross trend strategy, slots between TREND_EMA
+#   and DONCHIAN — catches momentum-building stocks before the 50/200 golden cross fires.
+# HIGH_52W (ADX 15-22, vol_ratio≥1.3): 252-bar channel breakout with volume confirmation.
+# GAP_GO (atr≥3.0, beta≥1.5): highest-beta names for intraday gap-up plays.
 STRATEGY_ASSIGNMENT_RULES = {
     "RSI2_OVN":     {"beta_max": 1.3, "atr_max": 3.0},
+    "GAP_GO":       {"atr_min": 3.0, "beta_min": 1.5},
     "ORB_BRK":      {"atr_min": 2.5, "beta_min": 0.95},
     "MOM_CONT":     {"atr_min": 3.0, "volume_ratio_min": 1.5},
     "SUPERTREND":   {"adx_min": 25, "atr_min": 2.5},
     "TREND_EMA":    {"adx_min": 25, "atr_max": 2.5},
+    "DUAL_EMA":     {"adx_min": 22, "adx_max": 27},
     "DONCHIAN_BRK": {"adx_min": 20, "adx_max": 25},
+    "HIGH_52W":     {"adx_min": 15, "adx_max": 22, "volume_ratio_min": 1.3},
     "MACD_CROSS":   {"adx_min": 15, "adx_max": 20},
     "BB_MEANREV":   {"adx_max": 20, "atr_min": 1.5},
 }
 
-# Initial thresholds — calibrated in Task 8 after a real run against live yfinance data.
-# Structure mirrors STRATEGY_ASSIGNMENT_RULES; same cascade priority order.
+# US rules — mirrors STRATEGY_ASSIGNMENT_RULES with US-specific calibrations.
 US_STRATEGY_ASSIGNMENT_RULES = {
     "RSI2_OVN":     {"beta_max": 1.3,  "atr_max": 3.0},
-    "ORB_BRK":      {"atr_min": 2.5,   "beta_min": 1.5},  # calibrated 2026-07-01: COIN/TSLA/NVDA all beta≥1.9; 1.1 let AMZN (beta=1.26, ADX=27.6) jump the queue ahead of SUPERTREND
+    "GAP_GO":       {"atr_min": 3.5,   "beta_min": 1.8},  # US high-beta gap candidates: NVDA/TSLA/COIN
+    "ORB_BRK":      {"atr_min": 2.5,   "beta_min": 1.5},  # calibrated 2026-07-01: raised from 1.1
     "MOM_CONT":     {"atr_min": 3.0,   "volume_ratio_min": 1.5},
     "SUPERTREND":   {"adx_min": 25,    "atr_min": 2.5},
     "TREND_EMA":    {"adx_min": 25,    "atr_max": 2.5},
+    "DUAL_EMA":     {"adx_min": 22,    "adx_max": 27},
     "DONCHIAN_BRK": {"adx_min": 20,    "adx_max": 25},
+    "HIGH_52W":     {"adx_min": 15,    "adx_max": 22, "volume_ratio_min": 1.3},
     "MACD_CROSS":   {"adx_min": 15,    "adx_max": 20},
     "BB_MEANREV":   {"adx_max": 20,    "atr_min": 2.0},  # raised from India's 1.5; US baseline vol is higher
 }

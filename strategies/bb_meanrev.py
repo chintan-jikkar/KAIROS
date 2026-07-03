@@ -19,10 +19,11 @@ from strategies.base import BaseStrategy
 
 DEFAULT_PARAMS = {
     "bb_period": 20,
-    "entry_std": 1.6,           # NSE default between SPY's 1.5 and QQQ's 1.8
+    "entry_std": 2.0,           # tightened from 1.6σ; standard 2σ is more selective
     "stop_loss_pct": 0.015,     # tighter than the daily strategies — intraday
     "max_hold_candles": 8,      # ~2 hours on 15-min bars
     "market_filter": False,     # mean reversion doesn't need a green/red market
+    "rsi14_max_entry": 35,      # only fade when RSI14 also confirms oversold conditions
 }
 
 
@@ -35,7 +36,7 @@ class BBMeanReversionStrategy(BaseStrategy):
         super().__init__(merged, market)
 
     def generate_signal(self, symbol: str, df: pd.DataFrame) -> dict | None:
-        """df: intraday bars (15-min) for today, with Bollinger columns already added."""
+        """df: intraday bars (15-min) for today, with Bollinger and RSI columns already added."""
         if df is None or df.empty:
             return None
 
@@ -43,11 +44,16 @@ class BBMeanReversionStrategy(BaseStrategy):
         close = self._get(last, "close")
         bb_lower = self._get(last, "bb_lower")
         bb_mid = self._get(last, "bb_mid")
+        rsi14 = self._get(last, "rsi_14")
 
         if any(v is None for v in [close, bb_lower, bb_mid]):
             return None
 
         if close >= bb_lower:
+            return None
+
+        # RSI14 gate — only fade oversold conditions, not price drops with momentum still intact
+        if rsi14 is not None and rsi14 > self.params["rsi14_max_entry"]:
             return None
 
         entry_price = float(close)

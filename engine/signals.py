@@ -13,7 +13,7 @@ from loguru import logger
 from sqlalchemy.orm import Session
 
 from data.market_data import fetch_india_daily, fetch_india_intraday, fetch_us_daily, fetch_us_intraday
-from data.indicators import add_all_strategy_indicators, add_volume_sma, add_bbands
+from data.indicators import add_all_strategy_indicators, add_volume_sma, add_bbands, add_rsi
 from database.models import Signal
 from strategies.rsi2_overnight import RSI2OvernightStrategy
 from strategies.orb_breakout import ORBBreakoutStrategy
@@ -23,9 +23,12 @@ from strategies.bb_meanrev import BBMeanReversionStrategy
 from strategies.donchian_breakout import DonchianBreakoutStrategy
 from strategies.macd_crossover import MACDCrossoverStrategy
 from strategies.supertrend import SupertrendStrategy
+from strategies.dual_ema import DualEMAStrategy
+from strategies.high52w import High52WStrategy
+from strategies.gap_and_go import GapAndGoStrategy
 
 # Strategies evaluated on intraday (15-min) bars rather than daily bars
-INTRADAY_STRATEGIES = ("ORB_BRK", "BB_MEANREV")
+INTRADAY_STRATEGIES = ("ORB_BRK", "BB_MEANREV", "GAP_GO")
 
 # Active strategy registry — add / remove strategies here
 STRATEGY_REGISTRY = {
@@ -37,6 +40,9 @@ STRATEGY_REGISTRY = {
     "DONCHIAN_BRK": DonchianBreakoutStrategy,
     "MACD_CROSS": MACDCrossoverStrategy,
     "SUPERTREND": SupertrendStrategy,
+    "DUAL_EMA": DualEMAStrategy,
+    "HIGH_52W": High52WStrategy,
+    "GAP_GO": GapAndGoStrategy,
 }
 
 
@@ -163,6 +169,7 @@ def run_meanrev_scan(
                 continue
 
             add_bbands(df_intra, period=strategy.params["bb_period"], std=strategy.params["entry_std"])
+            add_rsi(df_intra, [14])
             signal = strategy.generate_signal(symbol, df_intra)
         except Exception as exc:
             logger.error(f"Mean-reversion scan failed for {symbol}: {exc}")
@@ -247,6 +254,50 @@ def check_exits_for_open_trades(db: Session) -> list[dict]:
             continue
 
     return to_exit
+
+
+def run_gap_go_scan(
+    universe: list[dict],
+    db: Session,
+    market: str = "INDIA",
+) -> list[dict]:
+    """
+    Intraday scan for GAP_GO signals — called once at market open (09:30 IST / 09:30 ET)
+    after the first 15-min candle completes. Only checks stocks assigned to GAP_GO.
+    Attaches prev_close and vol_sma_20 from daily data to the intraday df.
+    """
+    actionable: list[dict] = []
+    strategy = GapAndGoStrategy()
+
+    gap_symbols = [s["symbol"] for s in universe if s.get("assigned_strategy") == "GAP_GO"]
+    fetch_intra = fetch_india_intraday if market == "INDIA" else fetch_us_intraday
+    fetch_daily = fetch_india_daily if market == "INDIA" else fetch_us_daily
+
+    for symbol in gap_symbols:
+        try:
+            df_intra = fetch_intra(symbol, interval="15m", period="1d")
+            if df_intra.empty or len(df_intra) < 1:
+                continue
+
+            df_daily = fetch_daily(symbol, period="1mo")
+            if not df_daily.empty and len(df_daily) >= 2:
+                prev_close = float(df_daily["close"].iloc[-2])
+                vol_sma_20 = float(df_daily["volume"].tail(20).mean())
+                df_intra["prev_close"] = prev_close
+                df_intra["vol_sma_20"] = vol_sma_20
+
+            signal = strategy.generate_signal(symbol, df_intra)
+        except Exception as exc:
+            logger.error(f"GAP_GO scan failed for {symbol}: {exc}")
+            continue
+
+        executed = signal is not None
+        _persist_signal(db, symbol, "GAP_GO", market, signal, executed)
+
+        if signal:
+            actionable.append(signal)
+
+    return actionable
 
 
 def confirm_momentum_entries(

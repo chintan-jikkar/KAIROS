@@ -317,6 +317,11 @@ def _assign_strategy(
             and vol_ratio >= rules["MOM_CONT"]["volume_ratio_min"]):
         return "MOM_CONT"
 
+    if ("GAP_GO" in rules
+            and atr_pct >= rules["GAP_GO"]["atr_min"]
+            and beta >= rules["GAP_GO"]["beta_min"]):
+        return "GAP_GO"
+
     if (atr_pct >= rules["ORB_BRK"]["atr_min"]
             and beta >= rules["ORB_BRK"]["beta_min"]):
         return "ORB_BRK"
@@ -329,8 +334,17 @@ def _assign_strategy(
             and atr_pct <= rules["TREND_EMA"]["atr_max"]):
         return "TREND_EMA"
 
+    if (adx is not None and "DUAL_EMA" in rules
+            and rules["DUAL_EMA"]["adx_min"] <= adx < rules["DUAL_EMA"]["adx_max"]):
+        return "DUAL_EMA"
+
     if (adx is not None and rules["DONCHIAN_BRK"]["adx_min"] <= adx < rules["DONCHIAN_BRK"]["adx_max"]):
         return "DONCHIAN_BRK"
+
+    if (adx is not None and "HIGH_52W" in rules
+            and rules["HIGH_52W"]["adx_min"] <= adx < rules["HIGH_52W"]["adx_max"]
+            and vol_ratio >= rules["HIGH_52W"].get("volume_ratio_min", 0)):
+        return "HIGH_52W"
 
     if (adx is not None and "MACD_CROSS" in rules
             and rules["MACD_CROSS"]["adx_min"] <= adx < rules["MACD_CROSS"]["adx_max"]):

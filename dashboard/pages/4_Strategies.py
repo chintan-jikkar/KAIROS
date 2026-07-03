@@ -37,6 +37,9 @@ STRATEGY_LIBRARY = {
     "DONCHIAN_BRK": "Donchian/Turtle channel breakout",
     "SUPERTREND":   "Supertrend",
     "MACD_CROSS":   "MACD momentum crossover",
+    "DUAL_EMA":     "Dual EMA crossover (9/20)",
+    "HIGH_52W":     "52-week high momentum",
+    "GAP_GO":       "Gap and go",
 }
 INACTIVE_LIBRARY = [
     "Dual EMA crossover", "VWAP reclaim", "Gap and go",

@@ -181,6 +181,6 @@ def add_all_strategy_indicators(df: pd.DataFrame) -> pd.DataFrame:
     add_volume_ratio(df, 20)
     add_obv(df)
     add_adx(df)
-    add_donchian(df, [10, 20])
+    add_donchian(df, [10, 20, 252])
     add_supertrend(df)
     return df

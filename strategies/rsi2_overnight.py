@@ -12,10 +12,10 @@ from strategies.base import BaseStrategy
 
 DEFAULT_PARAMS = {
     "rsi_period": 2,
-    "rsi_entry_threshold": 10,
+    "rsi_entry_threshold": 15,   # loosened from 10; RSI2<10 is too rare on liquid large-caps
     "rsi_exit_threshold": 65,
     "sma_filter_period": 200,
-    "stop_loss_pct": 0.04,
+    "stop_loss_pct": 0.025,      # tightened from 4%; overnight hold warrants tighter risk
     "max_hold_candles": 2,
     "entry_timing": "close",
     "exit_timing": "next_open",

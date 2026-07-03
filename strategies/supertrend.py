@@ -28,6 +28,7 @@ DEFAULT_PARAMS = {
     "supertrend_multiplier": 3.0,
     "atr_period": 14,
     "atr_target_multiplier": 4.0,  # nominal 2:1 R:R for logging; initial stop is the line itself
+    "volume_ratio_min": 1.2,        # require above-average volume at the flip to filter fakeouts
 }
 
 
@@ -51,12 +52,18 @@ class SupertrendStrategy(BaseStrategy):
         direction = self._get(last, "supertrend_direction")
         prev_direction = self._get(prev, "supertrend_direction")
         atr = self._get(last, atr_col)
+        vol_ratio = self._get(last, "vol_ratio_20")
 
         if any(v is None for v in [close, supertrend, direction, prev_direction, atr]):
             return None
 
         flipped_bullish = prev_direction < 0 and direction > 0
         if not flipped_bullish:
+            return None
+
+        # Volume gate — filter low-conviction flips in quiet/choppy tape
+        if vol_ratio is not None and vol_ratio < self.params["volume_ratio_min"]:
+            logger.debug(f"{symbol}: Supertrend flip but vol_ratio={vol_ratio:.2f} below min — skipping")
             return None
 
         entry_price = float(close)

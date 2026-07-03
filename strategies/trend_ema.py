@@ -26,11 +26,11 @@ DEFAULT_PARAMS = {
     "fast_ema_period": 50,
     "slow_ema_period": 200,
     "adx_period": 14,
-    "min_adx_for_entry": 22,        # below this, treat the cross as noise
+    "min_adx_for_entry": 25,        # raised from 22; ADX<25 golden crosses whipsaw too often
     "atr_period": 14,
     "atr_stop_multiplier": 3.0,     # fixed stop = entry - 3x ATR
     "atr_target_multiplier": 6.0,   # nominal 2:1 R:R for logging purposes
-    "max_hold_days": 60,            # time-stop: release capital if trend stalls
+    "max_hold_days": 45,            # shortened from 60; reduces exposure to 2 earnings cycles
 }
 
 

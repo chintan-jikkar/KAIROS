@@ -26,7 +26,7 @@ st.markdown(f"<style>{(Path(__file__).parent.parent / 'style.css').read_text()}<
 # data.indicators, which imports pandas_ta at module level and would crash this
 # dashboard's bare interpreter (same reason strategy_meta.py doesn't import
 # engine.signals.STRATEGY_REGISTRY either).
-BACKTESTABLE_STRATEGIES = ["RSI2_OVN", "MOM_CONT", "TREND_EMA", "DONCHIAN_BRK", "MACD_CROSS", "SUPERTREND"]
+BACKTESTABLE_STRATEGIES = ["RSI2_OVN", "MOM_CONT", "TREND_EMA", "DONCHIAN_BRK", "MACD_CROSS", "SUPERTREND", "DUAL_EMA", "HIGH_52W"]
 
 RUN_COLUMNS = [
     ("Symbol", "1fr"), ("Strategy", "1.4fr"), ("Date range", "1.6fr"),

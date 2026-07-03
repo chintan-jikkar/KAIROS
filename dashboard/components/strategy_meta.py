@@ -16,4 +16,7 @@ STRATEGY_NAMES = {
     "DONCHIAN_BRK": "Donchian/Turtle channel breakout",
     "MACD_CROSS": "MACD momentum crossover",
     "SUPERTREND": "Supertrend",
+    "DUAL_EMA": "Dual EMA crossover (9/20)",
+    "HIGH_52W": "52-week high momentum",
+    "GAP_GO": "Gap and go",
 }

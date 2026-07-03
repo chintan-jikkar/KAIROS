@@ -96,12 +96,12 @@ def test_assign_strategy_india_default_unchanged():
 # ---------------------------------------------------------------------------
 
 def test_assign_strategy_us_orb_brk_high_beta():
-    """COIN-like: ATR=6.95%, beta=2.08 → ORB_BRK (high-beta volatile, beta≥1.5 threshold)."""
+    """COIN-like: ATR=6.95%, beta=2.08 → GAP_GO (US GAP_GO atr≥3.5, beta≥1.8; wins before ORB_BRK)."""
     from engine.screener import _assign_strategy
     from data.universe import US_STRATEGY_ASSIGNMENT_RULES
     result = _assign_strategy(atr_pct=6.95, beta=2.08, vol_ratio=0.97, adx=21.6,
                               rules=US_STRATEGY_ASSIGNMENT_RULES)
-    assert result == "ORB_BRK"
+    assert result == "GAP_GO"
 
 
 def test_assign_strategy_us_supertrend_trending():
@@ -125,13 +125,14 @@ def test_assign_strategy_us_supertrend_low_beta():
 
 
 def test_assign_strategy_us_donchian_moderate_adx():
-    """MSFT-like: ATR=3.48%, beta=0.52, ADX=23.2 → DONCHIAN_BRK.
-    Low beta misses ORB_BRK; ADX 20–25 slots into DONCHIAN band."""
+    """MSFT-like: ATR=3.48%, beta=0.52, ADX=23.2 → DUAL_EMA.
+    ADX 22–27 now slots into DUAL_EMA (added 2026-07-03), which has higher cascade priority
+    than DONCHIAN_BRK. DONCHIAN still catches ADX 20–22."""
     from engine.screener import _assign_strategy
     from data.universe import US_STRATEGY_ASSIGNMENT_RULES
     result = _assign_strategy(atr_pct=3.48, beta=0.52, vol_ratio=0.71, adx=23.2,
                               rules=US_STRATEGY_ASSIGNMENT_RULES)
-    assert result == "DONCHIAN_BRK"
+    assert result == "DUAL_EMA"
 
 
 def test_assign_strategy_us_bb_meanrev_below_orb_beta():
@@ -344,7 +345,7 @@ def test_trend_ema_no_exit_before_max_hold():
     """should_exit does not trigger TIME_STOP before the hold cap is reached."""
     from strategies.trend_ema import TrendEMAStrategy
     strategy = TrendEMAStrategy()
-    trade = {"entry_price": 100.0, "stop_loss_price": 85.0, "hold_days": 59}
+    trade = {"entry_price": 100.0, "stop_loss_price": 85.0, "hold_days": 44}  # one day under new 45-day cap
     bar = {"close": 105.0, "ema_50": 106.0, "ema_200": 100.0}  # healthy trend
     exit_flag, reason = strategy.should_exit(trade, bar)
     assert exit_flag is False
@@ -355,7 +356,7 @@ def test_trend_ema_max_hold_days_in_default_params():
     """DEFAULT_PARAMS must declare max_hold_days so it's not accidentally removed."""
     from strategies.trend_ema import DEFAULT_PARAMS
     assert "max_hold_days" in DEFAULT_PARAMS
-    assert DEFAULT_PARAMS["max_hold_days"] == 60
+    assert DEFAULT_PARAMS["max_hold_days"] == 45  # shortened from 60 to reduce earnings risk
 
 
 def test_trend_ema_custom_max_hold_respected():
@@ -700,11 +701,11 @@ def test_assign_strategy_macd_cross_in_cascade():
     assert result == "MACD_CROSS"
 
 
-def test_assign_strategy_donchian_still_gets_adx_20_to_25():
-    """DONCHIAN_BRK range unchanged — ADX 20–25 still lands there."""
+def test_assign_strategy_donchian_still_gets_adx_below_dual_ema():
+    """DONCHIAN_BRK still assigned for ADX 20–22; ADX≥22 now goes to DUAL_EMA first."""
     from engine.screener import _assign_strategy
     from data.universe import STRATEGY_ASSIGNMENT_RULES
-    result = _assign_strategy(atr_pct=2.0, beta=1.0, vol_ratio=1.0, adx=22.0,
+    result = _assign_strategy(atr_pct=2.0, beta=1.0, vol_ratio=1.0, adx=21.0,
                               rules=STRATEGY_ASSIGNMENT_RULES)
     assert result == "DONCHIAN_BRK"
 
