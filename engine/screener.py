@@ -1,9 +1,18 @@
 """
-Weekly stock universe screener — runs every Sunday 20:00 IST.
-Filters INDIA_MASTER_POOL against INDIA_SCREEN_CRITERIA and returns top 5-6 stocks
-ranked by combined ATR% + volume-ratio score. Auto-assigns best-fit strategy.
+Daily pre-market screener — runs every trading day before the session opens.
+Filters the master pool against screener criteria, assigns strategies via the
+ADX/ATR/beta cascade, and ranks survivors using a 4-factor alpha composite:
+
+  Composite = 0.35×MOM_6M + 0.20×MOM_1M + 0.25×LOW_VOL + 0.20×VOL_TREND
+
+All factors are cross-sectionally Z-scored (clipped ±2σ) before weighting, so
+no factor dominates by scale. The composite is then re-scaled 0–100 for display.
+
+Fetch period upgraded to 1Y (was 3mo): needed for the 6M momentum factor and for
+EMA200/SMA200 indicators to be meaningful.
 """
 import datetime
+import math
 
 import pandas as pd
 import yfinance as yf
@@ -65,7 +74,7 @@ def run_india_screener(top_n: int | None = 6) -> list[dict]:
     """
     # Fetch NIFTY50 once for beta computation across all symbols.
     # ^NSEI is yfinance's ticker for the index; fetch_us_daily passes it unchanged (no .NS suffix).
-    nifty_df = fetch_us_daily("^NSEI", period="3mo")
+    nifty_df = fetch_us_daily("^NSEI", period="1y")
     if not nifty_df.empty and len(nifty_df) >= 2:
         nifty_closes = nifty_df["close"].tolist()
         nifty_returns = [
@@ -91,17 +100,9 @@ def run_india_screener(top_n: int | None = 6) -> list[dict]:
         logger.warning("Screener returned 0 qualifying stocks")
         return []
 
-    # Rank by composite score against fixed absolute baselines (not relative to
-    # this week's best) so scores are comparable across different screener runs.
-    # India baselines: ATR 3.0% and vol_ratio 2.0x represent a genuinely active
-    # trending name; anything at or above baseline scores the full 60 or 40 points.
-    ATR_BASELINE = 3.0
-    VOL_BASELINE = 2.0
+    results = _apply_factor_composite(results)
     df = pd.DataFrame(results)
-    df["atr_norm"] = (df["atr_pct"] / ATR_BASELINE).clip(upper=1.0)
-    df["vol_norm"] = (df["vol_ratio"] / VOL_BASELINE).clip(upper=1.0)
-    df["score"] = (df["atr_norm"] * 60 + df["vol_norm"] * 40).round(1)
-    df = df.sort_values("score", ascending=False)
+    df = df.sort_values("composite_score", ascending=False)
     if top_n is not None:
         df = df.head(top_n)
 
@@ -116,7 +117,7 @@ def run_us_screener(top_n: int | None = 6) -> list[dict]:
     SPY daily data is fetched once here and passed to each symbol evaluation
     to avoid one API call per symbol for beta computation.
     """
-    spy_df = fetch_us_daily("SPY", period="3mo")
+    spy_df = fetch_us_daily("SPY", period="1y")
     if spy_df.empty or len(spy_df) < 2:
         logger.warning("Could not fetch SPY data for beta computation — aborting US screener")
         return []
@@ -141,14 +142,9 @@ def run_us_screener(top_n: int | None = 6) -> list[dict]:
         logger.warning("US screener returned 0 qualifying stocks")
         return []
 
-    # Absolute baselines — US large-caps are more volatile than NSE names.
-    ATR_BASELINE = 3.5
-    VOL_BASELINE = 2.0
+    results = _apply_factor_composite(results)
     df = pd.DataFrame(results)
-    df["atr_norm"] = (df["atr_pct"] / ATR_BASELINE).clip(upper=1.0)
-    df["vol_norm"] = (df["vol_ratio"] / VOL_BASELINE).clip(upper=1.0)
-    df["score"] = (df["atr_norm"] * 60 + df["vol_norm"] * 40).round(1)
-    df = df.sort_values("score", ascending=False)
+    df = df.sort_values("composite_score", ascending=False)
     if top_n is not None:
         df = df.head(top_n)
 
@@ -160,7 +156,7 @@ def run_us_screener(top_n: int | None = 6) -> list[dict]:
 def _evaluate_symbol(symbol: str, nifty_returns: list[float] | None = None) -> dict | None:
     c = INDIA_SCREEN_CRITERIA
 
-    df = fetch_india_daily(symbol, period="3mo")
+    df = fetch_india_daily(symbol, period="1y")
     if df.empty or len(df) < 60:
         return None
 
@@ -211,11 +207,9 @@ def _evaluate_symbol(symbol: str, nifty_returns: list[float] | None = None) -> d
     beta = _compute_beta_vs_spy(symbol_returns, nifty_returns or [])
 
     strategy_id = _assign_strategy(atr_pct=atr_pct, beta=beta, vol_ratio=vol_ratio, adx=adx)
-
-    # Reuses the df already fetched/indicator-computed above — assignment is about which
-    # strategy's regime fits the stock, not that its entry conditions are met today, so most
-    # rows won't have a live signal. Real target/stop only show up when one actually fires.
     signal = STRATEGY_REGISTRY[strategy_id]().generate_signal(symbol, df)
+
+    factor_inputs = _compute_factor_inputs(closes)
 
     return {
         "symbol": symbol,
@@ -229,14 +223,16 @@ def _evaluate_symbol(symbol: str, nifty_returns: list[float] | None = None) -> d
         "assigned_strategy": strategy_id,
         "has_live_signal": signal is not None,
         "target_price": round(signal["target_price"], 2) if signal else None,
-        "score": 0.0,  # filled by caller after normalisation
+        "score": 0.0,         # back-filled by _apply_factor_composite
+        "composite_score": 0.0,
+        **factor_inputs,
     }
 
 
 def _evaluate_symbol_us(symbol: str, spy_returns: list[float]) -> dict | None:
     c = US_SCREEN_CRITERIA
 
-    df = fetch_us_daily(symbol, period="3mo")
+    df = fetch_us_daily(symbol, period="1y")
     if df.empty or len(df) < 60:
         return None
 
@@ -286,8 +282,9 @@ def _evaluate_symbol_us(symbol: str, spy_returns: list[float]) -> dict | None:
         atr_pct=atr_pct, beta=beta, vol_ratio=vol_ratio, adx=adx,
         rules=US_STRATEGY_ASSIGNMENT_RULES,
     )
-
     signal = STRATEGY_REGISTRY[strategy_id]().generate_signal(symbol, df)
+
+    factor_inputs = _compute_factor_inputs(closes)
 
     return {
         "symbol": symbol,
@@ -302,7 +299,108 @@ def _evaluate_symbol_us(symbol: str, spy_returns: list[float]) -> dict | None:
         "has_live_signal": signal is not None,
         "target_price": round(signal["target_price"], 2) if signal else None,
         "score": 0.0,
+        "composite_score": 0.0,
+        **factor_inputs,
     }
+
+
+def _compute_factor_inputs(closes: list[float]) -> dict:
+    """Compute raw factor values for a single stock from its close price series.
+    All values are raw — cross-sectional Z-scoring happens in _apply_factor_composite.
+    """
+    n = len(closes)
+
+    # MOM_6M: 6-month return excluding the most recent month (skip-month momentum).
+    # 6M = ~127 bars back, +21 bars skip = compare close[-1] to close[-148] if available.
+    if n >= 148:
+        mom_6m = closes[-1] / closes[-148] - 1
+    elif n >= 63:
+        mom_6m = closes[-1] / closes[-63] - 1  # 3M fallback
+    else:
+        mom_6m = closes[-1] / closes[0] - 1
+
+    # MOM_1M: 21-trading-day return.
+    mom_1m = closes[-1] / closes[-21] - 1 if n >= 21 else closes[-1] / closes[0] - 1
+
+    # LOW_VOL: Realized annualized volatility from the last 20 log-returns.
+    # Will be inverted (negated) during Z-scoring — lower vol → higher alpha score.
+    if n >= 21:
+        log_rets = [math.log(closes[i] / closes[i - 1]) for i in range(n - 20, n)]
+        mean_r = sum(log_rets) / len(log_rets)
+        var_r = sum((r - mean_r) ** 2 for r in log_rets) / (len(log_rets) - 1)
+        realized_vol_20 = round(math.sqrt(var_r) * math.sqrt(252), 6)
+    else:
+        realized_vol_20 = 0.25  # neutral fallback (≈25% annualized vol)
+
+    return {
+        "mom_6m": round(mom_6m, 6),
+        "mom_1m": round(mom_1m, 6),
+        "realized_vol_20": realized_vol_20,
+    }
+
+
+# Factor weights — IB quant composite (Jegadeesh-Titman momentum core + vol + flow).
+_FACTOR_WEIGHTS = {
+    "mom_6m":       0.35,   # medium-term momentum — highest conviction factor
+    "mom_1m":       0.20,   # short-term momentum — fast confirmation
+    "low_vol":      0.25,   # low-volatility anomaly — risk-adjusted return enhancer
+    "vol_trend":    0.20,   # volume trend / institutional flow proxy
+}
+
+
+def _apply_factor_composite(records: list[dict]) -> list[dict]:
+    """Cross-sectional factor scoring across all qualifying stocks.
+
+    Each raw factor is converted to a Z-score across the pool, winsorized at ±2σ,
+    then weighted and summed. The composite is re-scaled to 0–100 for display.
+    The 'score' field is also set to composite_score for backwards compatibility
+    with dashboard code that reads 'score'.
+    """
+    if not records:
+        return records
+
+    if len(records) == 1:
+        records[0]["composite_score"] = 50.0
+        records[0]["score"] = 50.0
+        for key in ("factor_mom_6m", "factor_mom_1m", "factor_low_vol", "factor_vol_trend"):
+            records[0][key] = 0.0
+        return records
+
+    def _zscore_col(values: list[float]) -> list[float]:
+        n = len(values)
+        mu = sum(values) / n
+        var = sum((v - mu) ** 2 for v in values) / max(n - 1, 1)
+        sigma = math.sqrt(var) if var > 0 else 1.0
+        return [max(-2.0, min(2.0, (v - mu) / sigma)) for v in values]
+
+    mom_6m_z   = _zscore_col([r["mom_6m"] for r in records])
+    mom_1m_z   = _zscore_col([r["mom_1m"] for r in records])
+    # LOW_VOL: invert so lower volatility = higher Z-score
+    low_vol_z  = _zscore_col([-r["realized_vol_20"] for r in records])
+    vol_trend_z = _zscore_col([r["vol_ratio"] for r in records])
+
+    w = _FACTOR_WEIGHTS
+    composites = [
+        w["mom_6m"] * mom_6m_z[i]
+        + w["mom_1m"] * mom_1m_z[i]
+        + w["low_vol"] * low_vol_z[i]
+        + w["vol_trend"] * vol_trend_z[i]
+        for i in range(len(records))
+    ]
+
+    c_min, c_max = min(composites), max(composites)
+    c_range = c_max - c_min if c_max > c_min else 1.0
+
+    for i, rec in enumerate(records):
+        rec["factor_mom_6m"]    = round(mom_6m_z[i], 3)
+        rec["factor_mom_1m"]    = round(mom_1m_z[i], 3)
+        rec["factor_low_vol"]   = round(low_vol_z[i], 3)
+        rec["factor_vol_trend"] = round(vol_trend_z[i], 3)
+        scaled = round((composites[i] - c_min) / c_range * 100, 1)
+        rec["composite_score"] = scaled
+        rec["score"] = scaled   # backwards-compat alias
+
+    return records
 
 
 def _assign_strategy(

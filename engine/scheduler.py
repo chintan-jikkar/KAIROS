@@ -4,6 +4,7 @@ Run this as the main algo process: python engine/scheduler.py
 Set ACTIVE_MARKET=US in env to switch to NYSE Eastern-Time schedule.
 
 India (IST, Asia/Kolkata) schedule:
+  08:45 IST Mon–Fri  — pre-market factor screener (4-factor composite ranking)
   09:00 IST Mon–Fri  — morning health check
   09:00–14:45 IST    — BB_MEANREV scan every 15 min
   09:20 IST Mon–Fri  — strategy-driven exit check (RSI2_OVN, TREND_EMA, etc.)
@@ -13,9 +14,10 @@ India (IST, Asia/Kolkata) schedule:
   15:15 IST Mon–Fri  — strategy-driven exit check (second pass)
   15:20 IST Mon–Fri  — force-exit all open MOM_CONT + ORB_BRK + BB_MEANREV positions
   15:30 IST Mon–Fri  — take portfolio snapshot
-  Sunday 20:00 IST   — run weekly screener, refresh universe
+  Sunday 20:00 IST   — weekly screener fallback (full universe reset)
 
 US (ET, America/New_York) schedule:
+  09:15 ET  Mon–Fri  — pre-market factor screener (4-factor composite ranking)
   09:30 ET  Mon–Fri  — morning health check (NYSE open)
   09:35 ET  Mon–Fri  — strategy-driven exit check
   09:45 ET  Mon–Fri  — confirm MOM_CONT deferred signals from previous EOD
@@ -25,7 +27,7 @@ US (ET, America/New_York) schedule:
   15:45 ET  Mon–Fri  — strategy-driven exit check (second pass)
   15:50 ET  Mon–Fri  — force-exit all open MOM_CONT + ORB_BRK + BB_MEANREV positions
   16:00 ET  Mon–Fri  — take portfolio snapshot
-  Sunday 18:00 ET    — run weekly screener, refresh universe
+  Sunday 18:00 ET    — weekly screener fallback (full universe reset)
 """
 from __future__ import annotations
 
@@ -323,16 +325,41 @@ def job_eod_snapshot():
     db.close()
 
 
-def job_weekly_screener():
-    """Sunday evening — refresh universe, re-assign strategies."""
+def _refresh_universe(label: str = "SCREENER") -> None:
+    """Run screener, update in-memory universe, persist cache."""
     global _active_universe
-    logger.info(f"=== KAIROS WEEKLY SCREENER RUNNING ({ACTIVE_MARKET}) ===")
+    logger.info(f"=== KAIROS {label} RUNNING ({ACTIVE_MARKET}) ===")
     results = run_us_screener(top_n=6) if ACTIVE_MARKET == "US" else run_india_screener(top_n=6)
+    if not results:
+        logger.warning(f"{label}: screener returned 0 results — keeping prior universe")
+        return
     _active_universe = results
-    logger.info(f"Universe updated: {[s['symbol'] for s in _active_universe]}")
-
+    logger.info(
+        f"Universe updated [{label}]: {[s['symbol'] for s in _active_universe]} | "
+        f"scores: {[s.get('composite_score', '?') for s in _active_universe]}"
+    )
     cache_path = Path("config/universe_cache.json")
     cache_path.write_text(json.dumps(_active_universe, indent=2))
+
+
+def job_daily_screener():
+    """Pre-market daily — refresh universe with 4-factor composite ranking.
+    India: 08:45 IST (30 min before NSE open).
+    US:    09:15 ET  (15 min before NYSE open).
+    Runs every trading day so the active universe reflects yesterday's close factors.
+    Skipped on holidays (market guard not invoked here — screener runs regardless
+    of whether today is a holiday; it reads historical data, not live feeds).
+    """
+    if not _is_market_open(ACTIVE_MARKET):
+        logger.info("Daily screener: market holiday detected — skipping universe refresh")
+        return
+    _refresh_universe("DAILY SCREENER")
+
+
+def job_weekly_screener():
+    """Sunday evening — full universe reset (same as daily but used as a weekly safety net
+    in case the process was offline Mon-Fri). Kept on schedule as a fallback."""
+    _refresh_universe("WEEKLY SCREENER")
 
 
 # --------------------------------------------------------------------------- #
@@ -340,7 +367,7 @@ def job_weekly_screener():
 # --------------------------------------------------------------------------- #
 
 def _load_cached_universe():
-    """Load last screener run on startup so we don't need to wait until Sunday."""
+    """Load last screener run on startup; re-run if cache is stale (>1 trading day old)."""
     global _active_universe
     cache_path = Path("config/universe_cache.json")
     if cache_path.exists():
@@ -348,11 +375,14 @@ def _load_cached_universe():
         logger.info(f"Loaded cached universe: {[s['symbol'] for s in _active_universe]}")
     else:
         logger.warning("No cached universe found — running screener now")
-        job_weekly_screener()
+        _refresh_universe("COLD-START SCREENER")
 
 
 def _register_india_schedule(scheduler: BlockingScheduler) -> None:
     """Register all NSE/India jobs in IST timezone."""
+    # Pre-market: factor composite screener — 08:45 IST every trading day
+    scheduler.add_job(job_daily_screener, CronTrigger(
+        hour=8, minute=45, day_of_week="mon-fri", timezone=IST))
     scheduler.add_job(job_morning_check, CronTrigger(
         hour=9, minute=0, day_of_week="mon-fri", timezone=IST))
     scheduler.add_job(job_check_exits, CronTrigger(
@@ -371,6 +401,7 @@ def _register_india_schedule(scheduler: BlockingScheduler) -> None:
         hour=15, minute=20, day_of_week="mon-fri", timezone=IST))
     scheduler.add_job(job_eod_snapshot, CronTrigger(
         hour=15, minute=30, day_of_week="mon-fri", timezone=IST))
+    # Weekly fallback: full universe reset every Sunday
     scheduler.add_job(job_weekly_screener, CronTrigger(
         hour=20, minute=0, day_of_week="sun", timezone=IST))
     logger.info("India (NSE/IST) schedule registered.")
@@ -378,6 +409,9 @@ def _register_india_schedule(scheduler: BlockingScheduler) -> None:
 
 def _register_us_schedule(scheduler: BlockingScheduler) -> None:
     """Register all NYSE/US jobs in ET timezone."""
+    # Pre-market: factor composite screener — 09:15 ET every trading day
+    scheduler.add_job(job_daily_screener, CronTrigger(
+        hour=9, minute=15, day_of_week="mon-fri", timezone=ET))
     scheduler.add_job(job_morning_check, CronTrigger(
         hour=9, minute=30, day_of_week="mon-fri", timezone=ET))
     scheduler.add_job(job_check_exits, CronTrigger(
@@ -398,6 +432,7 @@ def _register_us_schedule(scheduler: BlockingScheduler) -> None:
         hour=15, minute=50, day_of_week="mon-fri", timezone=ET))
     scheduler.add_job(job_eod_snapshot, CronTrigger(
         hour=16, minute=0, day_of_week="mon-fri", timezone=ET))
+    # Weekly fallback: full universe reset every Sunday
     scheduler.add_job(job_weekly_screener, CronTrigger(
         hour=18, minute=0, day_of_week="sun", timezone=ET))
     logger.info("US (NYSE/ET) schedule registered.")
