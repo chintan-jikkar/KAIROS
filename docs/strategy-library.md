@@ -1,8 +1,8 @@
-# KAIROS Strategy Library — Research
+# KAIROS Strategy Library: Research
 
 A menu of additional proven strategies beyond the current 11, organized by
-market. "Tried and tested" here means a real track record — either decades of
-practitioner use or a well-documented academic anomaly — not a trendy
+market. "Tried and tested" here means a real track record: either decades of
+practitioner use or a well-documented academic anomaly, not a trendy
 indicator combo with no history. Each entry sketches concrete rules (period,
 threshold) at the level of detail KAIROS's existing strategies use, so this is
 buildable, not just a list of names.
@@ -23,7 +23,7 @@ buildable, not just a list of names.
 | `HIGH_52W` | 52-week high breakout on volume | Cross-market (India/US/FX) |
 | `GAP_GO` | Intraday gap-and-continue | India/US (needs a single exchange open) |
 
-All 11 are architecture-agnostic — the assignment cascade in
+All 11 are architecture-agnostic. The assignment cascade in
 `engine/screener.py::_assign_strategy` is the same function regardless of
 market; FX just omits `MOM_CONT`/`GAP_GO`/`ORB_BRK` from its rule set since
 all three require a single exchange-open event that FX (a 24-hour market)
@@ -33,22 +33,22 @@ single instrument with OHLCV history, fits the existing
 
 ---
 
-## Cross-market candidates (India, US, and FX — same rules, just point them at a different universe)
+## Cross-market candidates (India, US, and FX; same rules, just point them at a different universe)
 
-Donchian/Turtle Breakout, Supertrend, and MACD Crossover — all three
-originally listed here — have since shipped as `DONCHIAN_BRK`, `SUPERTREND`,
+Donchian/Turtle Breakout, Supertrend, and MACD Crossover, all three
+originally listed here, have since shipped as `DONCHIAN_BRK`, `SUPERTREND`,
 and `MACD_CROSS`. Remaining candidates:
 
 ### VWAP Reversion (the spec's still-unbuilt "VWAP Reclaim")
 Intraday: when price deviates more than ~1.5 standard deviations below VWAP
 on elevated volume, buy expecting reversion back toward VWAP; symmetric short
 on the upside. This is standard institutional execution-desk logic adapted
-into a signal — every major prop/market-making desk watches VWAP deviation.
-Complements `BB_MEANREV` (different anchor — VWAP is volume-weighted,
+into a signal: every major prop/market-making desk watches VWAP deviation.
+Complements `BB_MEANREV` (different anchor: VWAP is volume-weighted,
 Bollinger is price-only) rather than duplicating it.
 
 ### Bollinger Squeeze Breakout
-The breakout counterpart to `BB_MEANREV`'s fade approach — John Bollinger
+The breakout counterpart to `BB_MEANREV`'s fade approach; John Bollinger
 documented both uses himself. When band width (upper−lower)/middle compresses
 to a multi-month low (a "squeeze"), volatility is coiling; trade the
 direction of the eventual breakout candle with volume confirmation. Distinct
@@ -59,9 +59,9 @@ moves that already happened), so the two don't compete for the same setups.
 
 ## India-specific additions
 
-Gap and Go, Dual EMA Crossover, and 52-Week High Momentum — all three
-originally listed here — have since shipped as `GAP_GO`, `DUAL_EMA`, and
-`HIGH_52W` (and turned out to be cross-market, not India-only — see the table
+Gap and Go, Dual EMA Crossover, and 52-Week High Momentum, all three
+originally listed here, have since shipped as `GAP_GO`, `DUAL_EMA`, and
+`HIGH_52W` (and turned out to be cross-market, not India-only: see the table
 above). No India-specific candidates are currently queued; revisit if a new
 one surfaces.
 
@@ -70,16 +70,16 @@ one surfaces.
 ## US-specific additions
 
 ### Post-Earnings Announcement Drift (PEAD)
-Ball & Brown, 1968 — one of the oldest documented anomalies in finance, still
+Ball & Brown (1968): one of the oldest documented anomalies in finance, still
 holds up. Stock beats earnings estimates by a meaningful margin → price drifts
 in the same direction for the following 60–90 days, markets underreact to the
 surprise. Needs an earnings-calendar/estimates data source KAIROS doesn't have
-yet (yfinance's earnings data is thin) — flagging as a real strategy worth
+yet (yfinance's earnings data is thin). Flagging as a real strategy worth
 building, but it has a data-sourcing dependency the others don't.
 
 ### Pre-Market Gap Fade (large-cap specific)
 US large-caps that gap >3% on no fresh news by market open tend to partially
-mean-revert in the first 30 minutes — the mirror image of Gap and Go, but
+mean-revert in the first 30 minutes: the mirror image of Gap and Go, but
 fade rather than follow, and specifically tuned to large-cap US behavior
 (this doesn't transfer well to India mid/small-caps, which gap-and-continue
 far more often due to lower liquidity).
@@ -102,29 +102,29 @@ collecting the interest-rate differential, with a trend filter (only carry
 when the pair is also trending in the carry direction, to avoid the classic
 "picking up pennies in front of a steamroller" crash risk during
 deleveraging events like 2008 or the 2015 CHF unpeg). Extensively documented
-in FX literature as a real, persistent risk premium — but genuinely
+in FX literature as a real, persistent risk premium; it carries a genuinely
 different risk profile from everything else in KAIROS (slow-moving carry P&L
 punctuated by sharp crash risk), worth building deliberately, not by analogy
 to an equity strategy.
 
 ---
 
-## Explicitly excluded — don't fit KAIROS's architecture
+## Explicitly excluded: don't fit KAIROS's architecture
 
 Flagging these so they don't get silently revisited and rebuilt into
 something that doesn't actually fit:
 
-- **Pairs trading / statistical arbitrage** — needs a *pair* of correlated
+- **Pairs trading / statistical arbitrage**: needs a *pair* of correlated
   instruments and a cointegration/spread model, not a single-symbol
   `generate_signal(symbol, df)` call. Would need a genuinely different
   engine shape (two-symbol input, spread-based entry/exit), not a drop-in
   `BaseStrategy` subclass.
-- **Cross-sectional / 12-1 month momentum** — ranks *all* stocks in a
+- **Cross-sectional / 12-1 month momentum**: ranks *all* stocks in a
   universe against each other and trades the top/bottom decile. KAIROS's
   screener already does something adjacent (scoring the universe), but this
   needs portfolio-level capital allocation across many simultaneous
   positions sized by rank, not a per-symbol signal. Same shape problem as
-  pairs trading — fits naturally once the deferred portfolio-level
+  pairs trading; fits naturally once the deferred portfolio-level
   simulation layer (see the backtesting engine design) exists, not before.
 
 ---
@@ -132,7 +132,7 @@ something that doesn't actually fit:
 ## Recommended build order
 
 If picking up one or two next: **VWAP Reversion** and **Bollinger Squeeze
-Breakout** — both cross-market (build once, use everywhere), both
+Breakout**, both cross-market (build once, use everywhere), both
 complementary to the existing `BB_MEANREV` rather than redundant with it,
 and neither needs a new data source (unlike PEAD, which is blocked on
 earnings-calendar data KAIROS doesn't pull today).
