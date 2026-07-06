@@ -50,6 +50,12 @@ logs/*.log
 # Brainstorming visual-companion session files
 .superpowers/
 
+# Planning-tool design docs (real history, kept locally, never tracked/pushed)
+docs/superpowers/
+
+# /graphify skill's local knowledge-graph cache
+graphify-out/
+
 # Testing
 .pytest_cache/
 .coverage
