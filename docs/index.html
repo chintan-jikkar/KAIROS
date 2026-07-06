@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KAIROS — Autonomous Signal-Driven Trading System</title>
+<meta name="description" content="An autonomous, paper-first, multi-market algorithmic trading system. 11 rule-based strategies, a daily 4-factor composite screener, a real backtesting engine, and a full risk stack — across India, US, and FX.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/3.35.0/tabler-icons-outline.min.css">
+<style>
+  :root{
+    --bg:#07070F; --card:rgba(255,255,255,0.04); --card-hover:rgba(255,255,255,0.07);
+    --border:rgba(255,255,255,0.08); --border-b:rgba(255,255,255,0.16);
+    --txt:#FFFFFF; --txt-m:rgba(255,255,255,0.6); --txt-d:rgba(255,255,255,0.35);
+    --gold:#F0C040; --cyan:#00D4FF; --emerald:#00F5A0; --crimson:#FF3B3B; --amber:#FFB347; --violet:#A855F7;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--txt);line-height:1.6;
+    background-image:
+      radial-gradient(ellipse 800px 500px at 12% 0%,rgba(240,192,64,0.09),transparent 70%),
+      radial-gradient(ellipse 600px 500px at 90% 12%,rgba(0,212,255,0.06),transparent 70%),
+      radial-gradient(ellipse 500px 400px at 60% 100%,rgba(168,85,247,0.05),transparent 70%);}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+  .display{font-family:'Bebas Neue',sans-serif;letter-spacing:.5px}
+  .mono{font-family:'IBM Plex Mono',monospace}
+
+  /* nav */
+  nav{display:flex;align-items:center;justify-content:space-between;padding:22px 24px;max-width:1080px;margin:0 auto}
+  .brand{display:flex;align-items:center;gap:11px}
+  .brand i{font-size:26px;color:var(--gold)}
+  .brand b{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px}
+  .brand span{font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--txt-d);display:block;margin-top:-3px}
+  nav a.gh{font-size:12px;color:var(--txt-d);text-decoration:none;border:1px solid var(--border-b);border-radius:8px;padding:8px 14px;transition:.2s}
+  nav a.gh:hover{color:var(--txt);border-color:var(--gold)}
+
+  /* hero */
+  .hero{text-align:center;padding:64px 0 50px}
+  .pill{display:inline-flex;align-items:center;gap:7px;font-size:11px;color:var(--amber);
+    border:1px solid rgba(255,179,71,0.35);background:rgba(255,179,71,0.08);border-radius:30px;padding:6px 14px;margin-bottom:26px}
+  .pill::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--amber);box-shadow:0 0 8px var(--amber)}
+  h1{font-family:'Bebas Neue',sans-serif;font-size:clamp(42px,7.5vw,80px);font-weight:400;line-height:1.05;letter-spacing:.5px;
+    background:linear-gradient(120deg,#FFFFFF 20%,var(--gold) 60%,var(--cyan) 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .tag{font-size:clamp(15px,2.2vw,19px);color:var(--txt-m);max-width:660px;margin:22px auto 0}
+  .tag b{color:var(--emerald);font-weight:600}
+  .cta{display:flex;gap:13px;justify-content:center;flex-wrap:wrap;margin-top:34px}
+  .btn{font-size:13px;text-decoration:none;border-radius:10px;padding:13px 22px;transition:.2s;font-weight:600;font-family:'Inter',sans-serif}
+  .btn.primary{background:linear-gradient(120deg,var(--gold),#ffd873);color:#1a1400;box-shadow:0 8px 30px rgba(240,192,64,0.25)}
+  .btn.primary:hover{transform:translateY(-2px);box-shadow:0 12px 36px rgba(240,192,64,0.4)}
+  .btn.ghost{border:1px solid var(--border-b);color:var(--txt)}
+  .btn.ghost:hover{border-color:var(--cyan);color:var(--cyan)}
+  .badges{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:30px}
+  .badge{font-size:11px;color:var(--txt-m);border:1px solid var(--border);border-radius:7px;padding:6px 12px;background:var(--card);font-family:'IBM Plex Mono',monospace}
+  .badge b{color:var(--gold);font-weight:600}
+  .badge.warn{color:var(--amber);border-color:rgba(255,179,71,0.3);background:rgba(255,179,71,0.07)}
+  .badge.warn b{color:var(--amber)}
+
+  /* dashboard preview */
+  .screen{margin:48px auto 0;max-width:920px;border:1px solid var(--border-b);border-radius:16px;overflow:hidden;
+    background:linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.015));box-shadow:0 30px 80px rgba(0,0,0,0.5)}
+  .screen-bar{display:flex;align-items:center;gap:7px;padding:11px 15px;border-bottom:1px solid var(--border)}
+  .dot{width:11px;height:11px;border-radius:50%}
+  .screen-bar small{margin-left:10px;font-size:11px;color:var(--txt-d);font-family:'IBM Plex Mono',monospace}
+  .screen-body{padding:22px;display:grid;grid-template-columns:1.5fr 1fr;gap:16px}
+  .mini-card{border:1px solid var(--border);border-radius:11px;padding:15px;background:var(--card)}
+  .mini-card .lbl{font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:var(--txt-d)}
+  .mini-card .val{font-family:'IBM Plex Mono',monospace;font-size:24px;font-weight:600;margin-top:5px}
+  .spark{margin-top:14px;height:90px;width:100%}
+  .kpi-mini{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+  /* sections */
+  section{padding:60px 0}
+  .eyebrow{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--gold);text-align:center;font-family:'IBM Plex Mono',monospace}
+  h2{font-family:'Bebas Neue',sans-serif;font-size:clamp(28px,4vw,40px);font-weight:400;letter-spacing:.5px;text-align:center;margin:10px 0 8px}
+  .sub{text-align:center;color:var(--txt-m);max-width:620px;margin:0 auto 40px}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+  .mod{border:1px solid var(--border);border-radius:14px;padding:22px;background:var(--card);transition:.2s;position:relative;overflow:hidden}
+  .mod:hover{border-color:var(--border-b);transform:translateY(-3px)}
+  .mod::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;opacity:.85}
+  .mod.c1::before{background:linear-gradient(90deg,var(--gold),transparent)}
+  .mod.c2::before{background:linear-gradient(90deg,var(--cyan),transparent)}
+  .mod.c3::before{background:linear-gradient(90deg,var(--emerald),transparent)}
+  .mod.c4::before{background:linear-gradient(90deg,var(--amber),transparent)}
+  .mod.c5::before{background:linear-gradient(90deg,var(--violet),transparent)}
+  .mod.c6::before{background:linear-gradient(90deg,var(--crimson),transparent)}
+  .mod.c7::before{background:linear-gradient(90deg,var(--gold),var(--cyan))}
+  .mod.c8::before{background:linear-gradient(90deg,var(--cyan),var(--emerald))}
+  .mod .num{font-size:11px;color:var(--txt-d);font-family:'IBM Plex Mono',monospace}
+  .mod h3{font-family:'Bebas Neue',sans-serif;font-size:19px;font-weight:400;letter-spacing:.3px;margin:6px 0 8px}
+  .mod p{font-size:12.5px;color:var(--txt-m)}
+
+  /* strategy cards */
+  .strat-groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
+  .strat-group{border:1px solid var(--border);border-radius:14px;padding:20px;background:var(--card)}
+  .strat-group h4{font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:.8px;text-transform:uppercase;margin-bottom:4px}
+  .strat-group h4.tr{color:var(--gold)}.strat-group h4.mo{color:var(--cyan)}.strat-group h4.mr{color:var(--emerald)}.strat-group h4.br{color:var(--violet)}
+  .strat-group .count{font-size:10px;color:var(--txt-d);font-family:'IBM Plex Mono',monospace;margin-bottom:14px;display:block}
+  .strat{border-top:1px solid var(--border);padding:11px 0}
+  .strat:first-of-type{border-top:none}
+  .strat b{font-size:12.5px;color:var(--txt);font-weight:600}
+  .strat code{font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--txt-d);margin-left:6px}
+  .strat p{font-size:11.5px;color:var(--txt-m);margin-top:3px}
+
+  /* markets */
+  .mkt-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+  .mkt-card{border:1px solid var(--border);border-radius:14px;padding:22px;background:var(--card)}
+  .mkt-card h3{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:.5px;margin-bottom:10px;display:flex;align-items:center;gap:9px}
+  .mkt-card .flag{width:9px;height:9px;border-radius:50%}
+  .mkt-card ul{list-style:none;padding:0;margin-top:12px}
+  .mkt-card li{font-size:12px;color:var(--txt-m);padding:6px 0;border-top:1px solid var(--border);display:flex;gap:8px}
+  .mkt-card li:first-child{border-top:none}
+  .mkt-card li i{color:var(--gold);font-size:14px;flex-shrink:0;margin-top:1px}
+  .mkt-card .status{display:inline-block;font-size:9px;text-transform:uppercase;letter-spacing:.08em;padding:3px 8px;border-radius:5px;margin-top:12px;font-family:'IBM Plex Mono',monospace}
+  .status.paper{background:rgba(255,179,71,0.12);color:var(--amber)}
+  .status.manual{background:rgba(0,212,255,0.1);color:var(--cyan)}
+
+  .stack{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+  .chip{font-size:12px;color:var(--txt-d);border:1px solid var(--border-b);border-radius:30px;padding:9px 16px;background:var(--card);font-family:'IBM Plex Mono',monospace}
+  .chip b{color:var(--txt);font-family:'Inter',sans-serif;font-weight:600}
+
+  .risk-callout{max-width:760px;margin:32px auto 0;border:1px solid rgba(240,192,64,0.25);background:rgba(240,192,64,0.05);border-radius:14px;padding:24px 28px}
+  .risk-callout h4{font-family:'Bebas Neue',sans-serif;font-size:16px;color:var(--gold);letter-spacing:.5px;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+  .risk-callout p{font-size:13px;color:var(--txt-m)}
+  .risk-callout .rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:14px}
+  .risk-callout .rule{font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--txt-d)}
+  .risk-callout .rule b{display:block;color:var(--emerald);font-size:15px;margin-bottom:2px}
+
+  .flow{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-top:8px}
+  .step{border:1px solid var(--border);border-radius:14px;padding:22px;background:var(--card)}
+  .step .n{width:30px;height:30px;border-radius:8px;background:rgba(240,192,64,0.15);color:var(--gold);
+    display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',sans-serif;font-size:15px;margin-bottom:12px}
+  .step h4{font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:.3px;margin-bottom:6px}
+  .step p{font-size:12px;color:var(--txt-m)}
+
+  pre{background:#0a0a14;border:1px solid var(--border-b);border-radius:12px;padding:20px 22px;overflow-x:auto;
+    font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--txt);max-width:680px;margin:0 auto;line-height:1.8}
+  pre .c{color:var(--txt-d)}
+  pre .g{color:var(--emerald)}
+
+  footer{border-top:1px solid var(--border);padding:40px 0;text-align:center;color:var(--txt-d);font-size:12px;margin-top:30px}
+  footer a{color:var(--gold);text-decoration:none}
+  .disc{max-width:660px;margin:0 auto 16px;font-size:11px;color:var(--txt-m);line-height:1.7}
+  @media(max-width:680px){.screen-body{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="brand">
+    <i class="ti ti-bolt"></i>
+    <div><b>KAIROS</b><span>Signal-Driven Trading</span></div>
+  </div>
+  <a class="gh" href="https://github.com/chintan-jikkar/KAIROS" target="_blank" rel="noopener">View on GitHub →</a>
+</nav>
+
+<header class="hero wrap">
+  <div class="pill">Paper trading only — no live capital yet</div>
+  <h1>Rules in. Discipline out.<br>No feelings involved.</h1>
+  <p class="tag">An autonomous, signal-driven trading system — 11 rule-based strategies, a daily 4-factor composite screener, and a real backtesting engine, running across India, US, and FX. <b>Paper-first, always.</b> No live trade until the numbers earn it.</p>
+  <div class="cta">
+    <a class="btn primary" href="https://github.com/chintan-jikkar/KAIROS" target="_blank" rel="noopener">Get the code</a>
+    <a class="btn ghost" href="#start">Quick start</a>
+  </div>
+  <div class="badges">
+    <div class="badge"><b>11</b> strategies</div>
+    <div class="badge"><b>3</b> markets</div>
+    <div class="badge"><b>86</b> tests passing</div>
+    <div class="badge warn"><b>Paper</b> trading only</div>
+  </div>
+
+  <div class="screen">
+    <div class="screen-bar">
+      <span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span>
+      <small>KAIROS — Overview · India</small>
+    </div>
+    <div class="screen-body">
+      <div class="mini-card">
+        <div class="lbl">Portfolio value</div>
+        <svg class="spark" viewBox="0 0 400 90" preserveAspectRatio="none">
+          <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#F0C040" stop-opacity=".35"/><stop offset="100%" stop-color="#F0C040" stop-opacity="0"/></linearGradient></defs>
+          <polygon points="0,72 40,68 80,70 120,58 160,60 200,46 240,49 280,34 320,37 360,20 400,15 400,90 0,90" fill="url(#g)"/>
+          <polyline points="0,72 40,68 80,70 120,58 160,60 200,46 240,49 280,34 320,37 360,20 400,15" fill="none" stroke="#F0C040" stroke-width="2"/>
+        </svg>
+      </div>
+      <div class="kpi-mini">
+        <div class="mini-card"><div class="lbl">Today's P&amp;L</div><div class="val" style="color:var(--emerald);font-size:19px">+2.4%</div></div>
+        <div class="mini-card"><div class="lbl">Active signals</div><div class="val" style="color:var(--cyan);font-size:19px">4</div></div>
+        <div class="mini-card"><div class="lbl">Win rate</div><div class="val" style="color:var(--gold);font-size:19px">61%</div></div>
+        <div class="mini-card"><div class="lbl">Max drawdown</div><div class="val" style="color:var(--txt);font-size:19px">−3.1%</div></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section id="pages" class="wrap">
+  <div class="eyebrow">The dashboard</div>
+  <h2>Eight pages, one trading loop</h2>
+  <p class="sub">A rule-based signal engine generates trades; a Streamlit dashboard makes every step of the loop watchable.</p>
+  <div class="grid">
+    <div class="mod c1"><div class="num">01</div><h3>Overview</h3><p>Hero KPIs, equity curve, monthly returns grid, open/closed positions — the first thing you check each morning.</p></div>
+    <div class="mod c2"><div class="num">02</div><h3>Live Trades</h3><p>Per-strategy control cards, open positions, and a recent-signals feed — what's running right now, and why.</p></div>
+    <div class="mod c3"><div class="num">03</div><h3>Logbook</h3><p>Full trade journal with editable conviction notes and lessons learned per closed trade.</p></div>
+    <div class="mod c4"><div class="num">04</div><h3>Strategies</h3><p>Status cards for all 11 strategies, a paper-trade launcher, and a dynamic strategy-creator form.</p></div>
+    <div class="mod c5"><div class="num">05</div><h3>Markets</h3><p>India / US / FX screener tabs ranked by factor composite, candlestick deep-dive, live company data.</p></div>
+    <div class="mod c6"><div class="num">06</div><h3>Analysis</h3><p>Portfolio-level VaR/CVaR (95%/99%, 1-day and 10-day scaled) computed from real snapshot history.</p></div>
+    <div class="mod c7"><div class="num">07</div><h3>Backtests</h3><p>Filterable run history with a full metrics card — Sharpe, drawdown, win rate, VaR/CVaR — per backtest.</p></div>
+    <div class="mod c8"><div class="num">08</div><h3>Settings</h3><p>Risk parameter overrides, broker key storage, market toggle, export/reset controls.</p></div>
+  </div>
+</section>
+
+<section id="strategies" class="wrap">
+  <div class="eyebrow">The signal engine</div>
+  <h2>Eleven strategies, one signal contract</h2>
+  <p class="sub">Every strategy implements the same <code class="mono" style="color:var(--gold)">generate_signal</code> / <code class="mono" style="color:var(--gold)">should_exit</code> interface, so the screener can assign any qualifying stock to whichever one fits its current regime.</p>
+  <div class="strat-groups">
+    <div class="strat-group">
+      <h4 class="tr">Trend-following</h4><span class="count">4 strategies</span>
+      <div class="strat"><b>TREND_EMA</b><code>ADX≥25</code><p>50/200 EMA golden/death cross, ADX-filtered. Multi-day/week hold — no EOD timer.</p></div>
+      <div class="strat"><b>DUAL_EMA</b><code>ADX 20–27</code><p>9/20 EMA cross — fills the calendar gap 4–6 weeks before TREND_EMA would fire.</p></div>
+      <div class="strat"><b>DONCHIAN_BRK</b><code>1983 Turtles</code><p>20-bar high entry / 10-bar low trailing exit — the original Richard Dennis system.</p></div>
+      <div class="strat"><b>SUPERTREND</b><code>ATR band</code><p>ATR-band trend flip — the most-used indicator in Indian retail algo trading.</p></div>
+    </div>
+    <div class="strat-group">
+      <h4 class="mo">Momentum</h4><span class="count">3 strategies</span>
+      <div class="strat"><b>MOM_CONT</b><code>+3% / 2× vol</code><p>Next-day continuation after a big move, skipped if the gap already priced it in.</p></div>
+      <div class="strat"><b>MACD_CROSS</b><code>12/26/9</code><p>Gerald Appel's 1970s crossover — fires earlier in a trend than TREND_EMA/SUPERTREND.</p></div>
+      <div class="strat"><b>HIGH_52W</b><code>Jegadeesh-Titman</code><p>New 52-week closing high on volume — anchoring-bias breakout, academically robust.</p></div>
+    </div>
+    <div class="strat-group">
+      <h4 class="mr">Mean-reversion</h4><span class="count">2 strategies</span>
+      <div class="strat"><b>RSI2_OVN</b><code>RSI(2)&lt;15</code><p>Overnight reversion above SMA200 — buy the close, sell the next open.</p></div>
+      <div class="strat"><b>BB_MEANREV</b><code>15-min bands</code><p>Intraday Bollinger fade below the lower band, back toward SMA20.</p></div>
+    </div>
+    <div class="strat-group">
+      <h4 class="br">Breakout</h4><span class="count">2 strategies</span>
+      <div class="strat"><b>ORB_BRK</b><code>09:15–09:45</code><p>Opening-range breakout on 1.5× volume, 2:1 R:R, flattened by 14:45.</p></div>
+      <div class="strat"><b>GAP_GO</b><code>2–5% gap</code><p>High-beta names that gap up and hold — trades the same-day continuation.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="markets" class="wrap">
+  <div class="eyebrow">Coverage</div>
+  <h2>Three markets, one engine</h2>
+  <p class="sub">Same 4-factor composite (momentum 6M + 1M, low-volatility, volume-trend — cross-sectional Z-scored) ranks the universe in every market.</p>
+  <div class="mkt-grid">
+    <div class="mkt-card">
+      <h3><span class="flag" style="background:var(--gold)"></span>India</h3>
+      <ul>
+        <li><i class="ti ti-clock"></i> Pre-market factor screener, 08:45 IST daily</li>
+        <li><i class="ti ti-bolt"></i> GAP_GO scan at 09:30 IST (first 15-min candle)</li>
+        <li><i class="ti ti-calendar"></i> Weekly full-universe reset, Sunday 20:00 IST</li>
+      </ul>
+      <span class="status paper">Paper — Zerodha Kite staged</span>
+    </div>
+    <div class="mkt-card">
+      <h3><span class="flag" style="background:var(--cyan)"></span>United States</h3>
+      <ul>
+        <li><i class="ti ti-clock"></i> Pre-market factor screener, 09:15 ET daily</li>
+        <li><i class="ti ti-bolt"></i> GAP_GO scan at 09:46 ET (first 15-min candle)</li>
+        <li><i class="ti ti-calendar"></i> Weekly full-universe reset, Sunday 18:00 ET</li>
+      </ul>
+      <span class="status paper">Paper — Alpaca staged</span>
+    </div>
+    <div class="mkt-card">
+      <h3><span class="flag" style="background:var(--violet)"></span>FX</h3>
+      <ul>
+        <li><i class="ti ti-refresh"></i> On-demand factor screener, 8 major pairs</li>
+        <li><i class="ti ti-chart-line"></i> Same composite, DXY-beta-adjusted</li>
+        <li><i class="ti ti-tools"></i> Not yet on the automated daily schedule</li>
+      </ul>
+      <span class="status manual">Manual trigger — OANDA staged</span>
+    </div>
+  </div>
+</section>
+
+<section class="wrap">
+  <div class="eyebrow">Under the hood</div>
+  <h2>Built on a disciplined core</h2>
+  <p class="sub">The signal engine imports nothing from the dashboard. Strategies take an OHLCV DataFrame and return a signal — nothing more — so every one is independently unit-tested.</p>
+  <div class="stack">
+    <div class="chip"><b>Streamlit</b> dashboard</div>
+    <div class="chip"><b>SQLAlchemy</b> + SQLite</div>
+    <div class="chip"><b>pandas / pandas-ta</b></div>
+    <div class="chip"><b>APScheduler</b> jobs</div>
+    <div class="chip"><b>yfinance</b> data</div>
+    <div class="chip"><b>pytest</b> · 86 tests</div>
+  </div>
+
+  <div class="risk-callout">
+    <h4><i class="ti ti-shield-check"></i> Paper first, always</h4>
+    <p>No live order has ever been placed. The plan: ≥30 days and 50+ paper trades showing positive expectancy, per strategy, before any real capital touches it — the same gate every strategy has to clear, no exceptions.</p>
+    <div class="rules">
+      <div class="rule"><b>2%</b>max risk per trade</div>
+      <div class="rule"><b>10%</b>max portfolio heat</div>
+      <div class="rule"><b>6</b>max concurrent positions</div>
+      <div class="rule"><b>20%</b>drawdown halts everything</div>
+    </div>
+  </div>
+</section>
+
+<section id="start" class="wrap">
+  <div class="eyebrow">For your own use</div>
+  <h2>Run it in three commands</h2>
+  <p class="sub">Clone it, install the deps, launch the dashboard. Only yfinance is required to get live market data — no keys needed for paper trading.</p>
+  <div class="flow">
+    <div class="step"><div class="n">1</div><h4>Clone &amp; install</h4><p>Grab the repo and install the Python dependencies.</p></div>
+    <div class="step"><div class="n">2</div><h4>Start the dashboard</h4><p>One Streamlit command serves all eight pages.</p></div>
+    <div class="step"><div class="n">3</div><h4>Watch the loop</h4><p>Open <code>localhost:8501</code> — the screener, strategies, and paper trades are all there.</p></div>
+  </div>
+  <div style="margin-top:28px">
+<pre><span class="c"># 1 — clone &amp; install</span>
+git clone https://github.com/chintan-jikkar/KAIROS.git
+cd KAIROS
+pip install -r requirements.txt
+
+<span class="c"># 2 — run the dashboard (paper trading, no keys required)</span>
+streamlit run dashboard/app.py --server.port 8501
+
+<span class="c"># 3 — open</span>
+<span class="g">→ http://localhost:8501</span></pre>
+  </div>
+</section>
+
+<footer>
+  <p class="disc"><b>Not financial advice.</b> KAIROS is a rule-based, purely technical trading system — no sentiment or news inputs. Every signal is a model output; backtested performance is not indicative of future results. All trading today is simulated (paper) — no live capital is at risk. Market data is sourced from Yahoo Finance on a best-effort basis and may be delayed, incomplete, or revised.</p>
+  <p>Built by Chintan Jikkar · <a href="https://github.com/chintan-jikkar/KAIROS">github.com/chintan-jikkar/KAIROS</a></p>
+</footer>
+
+</body>
+</html>

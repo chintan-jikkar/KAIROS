@@ -1,6 +1,6 @@
 # KAIROS Strategy Library — Research
 
-A menu of additional proven strategies beyond the current 5, organized by
+A menu of additional proven strategies beyond the current 11, organized by
 market. "Tried and tested" here means a real track record — either decades of
 practitioner use or a well-documented academic anomaly — not a trendy
 indicator combo with no history. Each entry sketches concrete rules (period,
@@ -11,41 +11,33 @@ buildable, not just a list of names.
 
 | ID | Type | Market fit |
 |---|---|---|
-| `RSI2_OVN` | Overnight mean reversion | India (any liquid equity) |
-| `ORB_BRK` | Opening-range breakout | India (session-open markets) |
-| `MOM_CONT` | Next-day momentum continuation | India (any liquid equity) |
-| `TREND_EMA` | 50/200 EMA golden/death cross | India (any liquid equity) |
-| `BB_MEANREV` | Intraday Bollinger fade | India (any liquid equity) |
+| `RSI2_OVN` | Overnight mean reversion | Cross-market (India/US/FX) |
+| `ORB_BRK` | Opening-range breakout | India/US (needs a single exchange open) |
+| `MOM_CONT` | Next-day momentum continuation | India/US (needs a single exchange open) |
+| `TREND_EMA` | 50/200 EMA golden/death cross | Cross-market (India/US/FX) |
+| `BB_MEANREV` | Intraday Bollinger fade | Cross-market (India/US/FX) |
+| `DONCHIAN_BRK` | 20/10-bar Turtle channel breakout | Cross-market (India/US/FX) |
+| `SUPERTREND` | ATR-band trend flip | Cross-market (India/US/FX) |
+| `MACD_CROSS` | 12/26/9 momentum crossover | Cross-market (India/US/FX) |
+| `DUAL_EMA` | 9/20 EMA cross (faster `TREND_EMA`) | Cross-market (India/US/FX) |
+| `HIGH_52W` | 52-week high breakout on volume | Cross-market (India/US/FX) |
+| `GAP_GO` | Intraday gap-and-continue | India/US (needs a single exchange open) |
 
-All 5 are architecture-agnostic — none actually depend on India-specific
-mechanics, they've just only been *applied* to NSE stocks so far. Every
-strategy below is written the same way: works on any single instrument with
-OHLCV history, fits the existing `generate_signal`/`should_exit` interface.
+All 11 are architecture-agnostic — the assignment cascade in
+`engine/screener.py::_assign_strategy` is the same function regardless of
+market; FX just omits `MOM_CONT`/`GAP_GO`/`ORB_BRK` from its rule set since
+all three require a single exchange-open event that FX (a 24-hour market)
+doesn't have. Every strategy below is written the same way: works on any
+single instrument with OHLCV history, fits the existing
+`generate_signal`/`should_exit` interface.
 
 ---
 
 ## Cross-market candidates (India, US, and FX — same rules, just point them at a different universe)
 
-These are the highest-value additions: build once, deploy across all three
-markets immediately.
-
-### Donchian/Turtle Channel Breakout
-The original Turtle Traders system (Richard Dennis, 1983) — decades of real
-track record, the most battle-tested trend system that exists. Buy when price
-closes above the highest high of the last N bars (default N=20), stop at the
-lowest low of the last 10 bars, exit on a close below the 10-bar low (or a
-trailing ATR stop). Works on trending instruments generally; weak in choppy
-ranges, same failure mode as `TREND_EMA`. Genuinely complementary to
-`TREND_EMA` rather than redundant — Donchian reacts faster to fresh breakouts,
-EMA cross is slower/smoother.
-
-### Supertrend
-ATR-based trend-following band (`SuperTrend = HL2 ± multiplier × ATR`,
-typically period=10, multiplier=3). Flip long/short when price crosses the
-band. Less academically rigorous than Donchian but has an enormous pract
-track record specifically among NSE/India intraday and swing traders — it's
-the single most-used indicator in Indian retail algo trading. Good fit
-alongside `TREND_EMA` for shorter-timeframe trend signals.
+Donchian/Turtle Breakout, Supertrend, and MACD Crossover — all three
+originally listed here — have since shipped as `DONCHIAN_BRK`, `SUPERTREND`,
+and `MACD_CROSS`. Remaining candidates:
 
 ### VWAP Reversion (the spec's still-unbuilt "VWAP Reclaim")
 Intraday: when price deviates more than ~1.5 standard deviations below VWAP
@@ -54,13 +46,6 @@ on the upside. This is standard institutional execution-desk logic adapted
 into a signal — every major prop/market-making desk watches VWAP deviation.
 Complements `BB_MEANREV` (different anchor — VWAP is volume-weighted,
 Bollinger is price-only) rather than duplicating it.
-
-### MACD Crossover
-Gerald Appel, 1970s — one of the oldest momentum indicators still in
-universal use. Standard 12/26/9 EMA crossover; buy on MACD line crossing
-above signal line with histogram turning positive. Simple, well-understood,
-good as a *confirmation* filter for other strategies as much as a standalone
-signal.
 
 ### Bollinger Squeeze Breakout
 The breakout counterpart to `BB_MEANREV`'s fade approach — John Bollinger
@@ -74,24 +59,11 @@ moves that already happened), so the two don't compete for the same setups.
 
 ## India-specific additions
 
-### Gap and Go (the spec's still-unbuilt placeholder)
-Stock gaps up >2% at open on above-average pre-market/early volume, holds
-above the opening 5-minute range low — enter long on the hold, stop below
-that low. Distinct from `MOM_CONT` (which trades the *next* day after a big
-move) — this trades the *same-day* gap directly.
-
-### Dual EMA Crossover (the spec's still-unbuilt placeholder — faster than TREND_EMA)
-9/21 EMA cross instead of 50/200. Same mechanic as `TREND_EMA`, much shorter
-holding period (days, not weeks/months) — fills the gap between `TREND_EMA`'s
-slow trend signal and the intraday strategies.
-
-### 52-Week High Momentum
-Buy stocks making a new 52-week high on volume ≥1.5× average, with RSI(14)
-in the 55–75 range (trending but not yet blown-off-top exhausted). One of the
-most consistently replicated factors in momentum research (Jegadeesh &
-Titman, 1993, and dozens of follow-ups) — distinct from `MOM_CONT`'s
-next-day-after-a-spike logic since this is about proximity to a structural
-price level, not a recent return threshold.
+Gap and Go, Dual EMA Crossover, and 52-Week High Momentum — all three
+originally listed here — have since shipped as `GAP_GO`, `DUAL_EMA`, and
+`HIGH_52W` (and turned out to be cross-market, not India-only — see the table
+above). No India-specific candidates are currently queued; revisit if a new
+one surfaces.
 
 ---
 
@@ -159,7 +131,8 @@ something that doesn't actually fit:
 
 ## Recommended build order
 
-If picking up one or two next: **Donchian Breakout** and **Supertrend** —
-both cross-market (build once, use everywhere), both have the longest real
-track records of anything on this list, and both are genuinely complementary
-to what's already running rather than overlapping it.
+If picking up one or two next: **VWAP Reversion** and **Bollinger Squeeze
+Breakout** — both cross-market (build once, use everywhere), both
+complementary to the existing `BB_MEANREV` rather than redundant with it,
+and neither needs a new data source (unlike PEAD, which is blocked on
+earnings-calendar data KAIROS doesn't pull today).
